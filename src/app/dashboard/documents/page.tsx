@@ -1,0 +1,190 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { LoadingDots } from "@/components/ui/loading-dots";
+
+interface SavedDocument {
+  id: string;
+  userId: string;
+  type: string;
+  input: string;
+  output: string;
+  timestamp: string | null;
+}
+
+export default function DocumentsPage() {
+  const userId = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const raw = localStorage.getItem("saas-user");
+    if (!raw) return "";
+    try {
+      const parsed = JSON.parse(raw) as { email?: string };
+      return parsed.email ?? "";
+    } catch {
+      return "";
+    }
+  }, []);
+
+  const [documents, setDocuments] = useState<SavedDocument[]>([]);
+  const [selected, setSelected] = useState<SavedDocument | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState("");
+
+  const loadDocuments = useCallback(async () => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/documents?userId=${encodeURIComponent(userId)}`,
+      );
+      const payload = (await res.json()) as {
+        success?: boolean;
+        documents?: SavedDocument[];
+        error?: string;
+      };
+
+      if (!res.ok || !payload.success) {
+        setError(payload.error ?? "Failed to load documents.");
+        toast.error(payload.error ?? "Failed to load documents.");
+      } else {
+        setDocuments(payload.documents ?? []);
+      }
+    } catch {
+      setError("Unable to load documents.");
+      toast.error("Unable to load documents.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  async function onDelete(id: string) {
+    if (!userId) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch("/api/documents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, userId }),
+      });
+      const payload = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !payload.success) {
+        setError(payload.error ?? "Unable to delete document.");
+        toast.error(payload.error ?? "Unable to delete document.");
+      } else {
+        setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+        if (selected?.id === id) {
+          setSelected(null);
+        }
+        toast.success("Document deleted");
+      }
+    } catch {
+      setError("Unable to delete document.");
+      toast.error("Unable to delete document.");
+    } finally {
+      setDeletingId("");
+    }
+  }
+
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
+
+  return (
+    <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h1 className="text-xl font-semibold text-slate-900">My Documents</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          View and manage your saved generated documents.
+        </p>
+
+        {error ? (
+          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {error}
+          </p>
+        ) : null}
+
+        {loading ? (
+          <div className="mt-4">
+            <LoadingDots label="Loading documents" />
+          </div>
+        ) : documents.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">No saved documents yet.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {documents.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded-xl border border-slate-200 p-3 transition hover:bg-slate-50"
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelected(doc)}
+                  className="w-full text-left"
+                >
+                  <p className="text-sm font-semibold capitalize text-slate-900">
+                    {doc.type.replace("_", " ")}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {doc.input}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {doc.timestamp
+                      ? new Date(doc.timestamp).toLocaleString()
+                      : "Unknown time"}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(doc.id)}
+                  disabled={deletingId === doc.id}
+                  className="mt-2 rounded-md border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deletingId === doc.id ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Document Preview</h2>
+        {selected ? (
+          <div className="mt-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">Input</p>
+              <p className="mt-1 text-sm text-slate-700">{selected.input}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">Output</p>
+              {selected.type === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selected.output}
+                  alt="Saved generated"
+                  className="mt-1 w-full rounded-lg border border-slate-200"
+                />
+              ) : (
+                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-sm text-slate-100">
+                  {selected.output}
+                </pre>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-600">
+            Select a document to view content.
+          </p>
+        )}
+      </article>
+    </section>
+  );
+}
+
