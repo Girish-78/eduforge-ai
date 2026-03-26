@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
-import { getDb } from "@/lib/firebase-admin";
+import { getAuth, getDb } from "@/lib/firebase-admin";
 import type { UserRole } from "@/lib/roles";
 
 interface AuthBody {
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const auth = getAuth();
     const db = getDb();
     const usersRef = db.collection("users");
     const docId = email.toLowerCase();
@@ -40,6 +41,29 @@ export async function POST(request: Request) {
           { error: "Role is required for signup" },
           { status: 400 },
         );
+      }
+
+      try {
+        await auth.createUser({
+          email: docId,
+          password,
+        });
+      } catch (createUserError) {
+        const code =
+          typeof createUserError === "object" &&
+          createUserError !== null &&
+          "code" in createUserError
+            ? String(createUserError.code)
+            : "";
+
+        if (code === "auth/email-already-exists") {
+          return NextResponse.json(
+            { error: "This email is already registered. Please log in." },
+            { status: 409 },
+          );
+        }
+
+        throw createUserError;
       }
 
       await userRef.set({
@@ -56,10 +80,30 @@ export async function POST(request: Request) {
       });
     }
 
+    try {
+      await auth.getUserByEmail(docId);
+    } catch (getUserError) {
+      const code =
+        typeof getUserError === "object" &&
+        getUserError !== null &&
+        "code" in getUserError
+          ? String(getUserError.code)
+          : "";
+
+      if (code === "auth/user-not-found") {
+        return NextResponse.json(
+          { error: "No account found. Please sign up first." },
+          { status: 404 },
+        );
+      }
+
+      throw getUserError;
+    }
+
     const userDoc = await userRef.get();
     if (!userDoc.exists) {
       return NextResponse.json(
-        { error: "No account found. Please sign up first." },
+        { error: "Account profile is missing. Please contact support." },
         { status: 404 },
       );
     }
@@ -80,13 +124,14 @@ export async function POST(request: Request) {
     console.error("Auth route error", error);
     const message =
       error instanceof Error ? error.message : "Unexpected server error";
-    const isConfigError = message.includes(
-      "Missing Firebase Admin environment variables",
-    );
+    const isConfigError = message.includes("Missing Firebase Admin environment variable");
+    const isMetadataError =
+      message.includes("Getting metadata from plugin failed") ||
+      message.includes("Could not load the default credentials");
 
     return NextResponse.json(
       {
-        error: isConfigError
+        error: isConfigError || isMetadataError
           ? "Server auth configuration is missing. Please verify Firebase environment variables in deployment settings."
           : "Unable to process auth request right now.",
       },
