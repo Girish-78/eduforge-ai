@@ -78,8 +78,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Auth route error", error);
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    const isConfigError = message.includes(
+      "Missing Firebase Admin environment variables",
+    );
+
     return NextResponse.json(
-      { error: "Unable to process auth request right now." },
+      {
+        error: isConfigError
+          ? "Server auth configuration is missing. Please verify Firebase environment variables in deployment settings."
+          : "Unable to process auth request right now.",
+      },
       { status: 500 },
     );
   }
