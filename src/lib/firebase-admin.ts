@@ -8,7 +8,17 @@ function normalizePrivateKey(value: string) {
       ? trimmed.slice(1, -1)
       : trimmed;
 
-  return unquoted.replace(/\\n/g, "\n");
+  const normalized = unquoted.replace(/\r\n/g, "\n").replace(/\\n/g, "\n").trim();
+
+  const hasBegin = normalized.includes("-----BEGIN PRIVATE KEY-----");
+  const hasEnd = normalized.includes("-----END PRIVATE KEY-----");
+  if (!hasBegin || !hasEnd) {
+    throw new Error(
+      "Invalid FIREBASE_PRIVATE_KEY format. Expected PEM with BEGIN/END PRIVATE KEY markers.",
+    );
+  }
+
+  return normalized;
 }
 
 function getRequiredEnv(name: string) {
@@ -22,7 +32,11 @@ function getRequiredEnv(name: string) {
 function getFirebaseConfig(): admin.ServiceAccount & { storageBucket?: string } {
   const projectId = getRequiredEnv("FIREBASE_PROJECT_ID");
   const clientEmail = getRequiredEnv("FIREBASE_CLIENT_EMAIL");
-  const privateKey = normalizePrivateKey(getRequiredEnv("FIREBASE_PRIVATE_KEY"));
+  const privateKeyBase64 = process.env.FIREBASE_PRIVATE_KEY_B64?.trim();
+  const privateKeySource = privateKeyBase64
+    ? Buffer.from(privateKeyBase64, "base64").toString("utf8")
+    : getRequiredEnv("FIREBASE_PRIVATE_KEY");
+  const privateKey = normalizePrivateKey(privateKeySource);
   const storageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
 
   return {

@@ -128,12 +128,17 @@ export async function POST(request: Request) {
     const isMetadataError =
       message.includes("Getting metadata from plugin failed") ||
       message.includes("Could not load the default credentials");
+    const isPemError =
+      message.includes("Invalid PEM formatted message") ||
+      message.includes("Invalid FIREBASE_PRIVATE_KEY format");
 
     return NextResponse.json(
       {
-        error: isConfigError || isMetadataError
-          ? "Server auth configuration is missing. Please verify Firebase environment variables in deployment settings."
-          : "Unable to process auth request right now.",
+        error: isPemError
+          ? "Server auth key is invalid. Please re-check FIREBASE_PRIVATE_KEY format in deployment settings."
+          : isConfigError || isMetadataError
+            ? "Server auth configuration is missing. Please verify Firebase environment variables in deployment settings."
+            : "Unable to process auth request right now.",
       },
       { status: 500 },
     );
