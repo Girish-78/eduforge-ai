@@ -20,7 +20,6 @@ Modern full-stack SaaS starter built with:
 - `GET /api/health` - health status endpoint
 - `POST /api/auth` - signup/login endpoint with Firestore role storage
 - `POST /api/generate` - AI content generation endpoint
-- `POST /api/generate-image` - AI image generation and storage endpoint
 - `GET /api/documents?userId=...` - list saved generated documents
 - `DELETE /api/documents` - delete a saved document
 
@@ -82,9 +81,7 @@ Free usage tracking is enabled:
    - `FIREBASE_CLIENT_EMAIL`
    - `FIREBASE_PRIVATE_KEY` (keep `\n` escapes)
    - `FIREBASE_STORAGE_BUCKET`
-   - `OPENAI_API_KEY`
-   - `OPENAI_MODEL` (optional, defaults to `gpt-4o-mini`)
-   - `OPENAI_IMAGE_MODEL` (optional, defaults to `gpt-image-1`)
+   - `GEMINI_API_KEY`
 
 ## Environment Variables Setup
 
@@ -102,9 +99,8 @@ Then add real values for all keys:
   - `FIREBASE_PRIVATE_KEY`
   - `FIREBASE_STORAGE_BUCKET`
 - OpenAI:
-  - `OPENAI_API_KEY`
-  - `OPENAI_MODEL`
-  - `OPENAI_IMAGE_MODEL`
+- Gemini:
+  - `GEMINI_API_KEY`
 
 For Vercel, add the same variables in Project Settings -> Environment Variables.
 
@@ -143,7 +139,6 @@ Optimizations already enabled:
 7. After deploy, test:
    - signup/login flow
    - tool generation
-   - image generation + storage
    - my documents list/delete
 8. Add custom domain (optional) from Vercel dashboard.
 

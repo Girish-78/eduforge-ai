@@ -68,13 +68,13 @@ export function ToolGenerator({
       });
 
       const payload = (await res.json()) as {
-        success?: boolean;
+        output?: string;
         result?: string;
         error?: string;
         usage?: { plan?: "free" | "pro"; remaining?: number; limit?: number };
       };
 
-      if (!res.ok || !payload.success) {
+      if (!res.ok) {
         setError(payload.error ?? "Generation failed.");
         toast.error(payload.error ?? "Generation failed.");
         if (payload.usage?.plan === "free" && payload.usage.remaining === 0) {
@@ -83,7 +83,7 @@ export function ToolGenerator({
         return;
       }
 
-      setOutput(payload.result ?? "");
+      setOutput(payload.output ?? payload.result ?? "");
       toast.success("Content generated");
       if (payload.usage?.plan === "free" && typeof payload.usage.remaining === "number") {
         setUsageWarning(

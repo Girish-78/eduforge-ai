@@ -13,7 +13,6 @@ const toolDescriptions: Record<string, string> = {
   Projects: "Create project outlines, milestones, and deliverables.",
   Reports: "Generate admin reports with concise highlights.",
   Circulars: "Draft official notices for students and staff.",
-  "Image Generator": "Create educational visuals and save to cloud storage.",
 };
 
 const toolRouteByName: Record<string, string> = {
@@ -25,7 +24,6 @@ const toolRouteByName: Record<string, string> = {
   Projects: "/dashboard/tools/projects",
   Reports: "/dashboard/tools/reports",
   Circulars: "/dashboard/tools/circulars",
-  "Image Generator": "/dashboard/tools/image",
 };
 
 export default function DashboardPage() {
@@ -49,7 +47,7 @@ export default function DashboardPage() {
     if (!userRole) return [];
     return roleTools[userRole];
   }, [userRole]);
-  const tools = [...roleBasedTools, "Image Generator"];
+  const tools = roleBasedTools;
 
   return (
     <section className="space-y-6">

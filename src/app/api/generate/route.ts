@@ -1,6 +1,6 @@
-import OpenAI from "openai";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getDb } from "@/lib/firebase-admin";
 import {
   buildPrompt,
@@ -59,32 +59,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: "OPENAI_API_KEY is not configured." },
+        { success: false, error: "GEMINI_API_KEY is not configured." },
         { status: 500 },
       );
     }
 
     const finalPrompt = buildPrompt(type, input);
-    const client = new OpenAI({ apiKey });
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-      input: [
-        {
-          role: "system",
-          content:
-            "You are an educational assistant. Provide clear, useful, and structured content suitable for schools.",
-        },
-        {
-          role: "user",
-          content: finalPrompt,
-        },
-      ],
-    });
-
-    const text = response.output_text?.trim();
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(finalPrompt);
+    const response = await result.response;
+    const text = response.text().trim();
 
     if (!text) {
       return NextResponse.json(
@@ -94,7 +82,7 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const docRef = await db.collection("documents").add({
+    await db.collection("documents").add({
       userId,
       type,
       input,
@@ -102,19 +90,13 @@ export async function POST(request: Request) {
       timestamp: Timestamp.now(),
     });
 
-    return NextResponse.json({
-      success: true,
-      id: docRef.id,
-      type,
-      result: text,
-      usage,
-    });
+    return NextResponse.json({ output: text });
   } catch (error) {
     console.error("/api/generate error", error);
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to generate content.",
+        error: "Failed to generate content. Please try again shortly.",
       },
       { status: 500 },
     );
