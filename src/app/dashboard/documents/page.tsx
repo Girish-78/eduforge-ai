@@ -165,7 +165,10 @@ export default function DocumentsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Output</p>
-              <MarkdownPreview content={selected.output} />
+              <MarkdownPreview
+                content={selected.output}
+                documentTitle={selected.input || selected.type.replace("_", " ")}
+              />
             </div>
           </div>
         ) : (

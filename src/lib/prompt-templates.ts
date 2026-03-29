@@ -54,10 +54,15 @@ const templates: Record<GenerateType, (input: string) => string> = {
     ].join(" "),
   notes: (input) =>
     [
-      `Generate student-friendly notes for: ${input}.`,
-      "Organize by concept headings with concise explanations.",
-      "Add one examples table and one recap section.",
-      "Use revision-focused language for school students.",
+      `Generate clean, printable student notes for: ${input}.`,
+      "Return STRICT Markdown only.",
+      "Use this exact section order: ## Topic Title, ## Key Concepts, ## Step-by-Step Explanation, ## Important Terms, ## Revision Table, ## Quick Recap.",
+      "Start every section with a ## heading.",
+      "Add a blank line between sections.",
+      "Use bullet points with maximum 10 words per bullet.",
+      "Do not compress ideas into single lines or merged sentences.",
+      "Ensure the revision table uses valid Markdown with a header row.",
+      "Keep the layout PDF-friendly, readable, and classroom-focused.",
     ].join(" "),
   practice_questions: (input) =>
     [

@@ -54,3 +54,141 @@ h4 {
   background-clip: text;
   color: transparent;
 }
+
+#pdf-content {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  color: #0f172a;
+}
+
+#pdf-content [data-pdf-body] {
+  font-size: 15px;
+}
+
+#pdf-content h1,
+#pdf-content h2,
+#pdf-content h3 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+#pdf-content p {
+  margin-bottom: 10px;
+}
+
+#pdf-content ul,
+#pdf-content ol {
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+#pdf-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+#pdf-content th,
+#pdf-content td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+#pdf-content .pdf-table-wrapper,
+#pdf-content table,
+#pdf-content thead,
+#pdf-content tbody,
+#pdf-content tr,
+#pdf-content th,
+#pdf-content td {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+#pdf-content [data-pdf-body] > h2 {
+  break-before: page;
+  page-break-before: always;
+}
+
+#pdf-content [data-pdf-body] > :first-child {
+  break-before: auto;
+  page-break-before: auto;
+}
+
+#pdf-content [data-pdf-body] > h2:first-child {
+  break-before: auto;
+  page-break-before: auto;
+}
+
+#pdf-content .pdf-document-header,
+#pdf-content .pdf-document-footer {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@page {
+  size: A4;
+  margin: 18mm 14mm 18mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #pdf-content,
+  #pdf-content * {
+    visibility: visible;
+  }
+
+  #pdf-content {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none !important;
+    min-height: auto;
+    padding: 28mm 14mm 18mm !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  #pdf-content [data-pdf-header] {
+    position: fixed;
+    top: 10mm;
+    left: 14mm;
+    right: 14mm;
+    margin: 0;
+    background: #fff;
+  }
+
+  #pdf-content [data-pdf-footer] {
+    position: fixed;
+    bottom: 8mm;
+    left: 14mm;
+    right: 14mm;
+    margin: 0;
+    background: #fff;
+  }
+
+  #pdf-content [data-pdf-body] {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  #pdf-content .pdf-footer__page-screen {
+    display: none;
+  }
+
+  #pdf-content .pdf-footer__page::after {
+    content: "Page " counter(page);
+  }
+}
