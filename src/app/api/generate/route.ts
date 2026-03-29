@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getDb } from "@/lib/firebase-admin";
 import {
-  buildPrompt,
+  generatePrompt,
   isGenerateType,
   type GenerateType,
 } from "@/lib/prompt-templates";
@@ -26,8 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid type. Allowed values: lesson_plan, worksheet, email, essay.",
+          error: "Invalid type. Please use a supported tool type.",
         },
         { status: 400 },
       );
@@ -67,7 +66,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const finalPrompt = buildPrompt(type, input);
+    const finalPrompt = generatePrompt({ toolType: type, inputs: input });
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(finalPrompt);

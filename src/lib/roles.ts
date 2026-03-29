@@ -1,13 +1,17 @@
-export type UserRole = "teacher" | "student" | "admin";
+export type UserRole = "teacher" | "student";
+
+export const allowedRoles: UserRole[] = ["teacher", "student"];
+
+export function isUserRole(value: string): value is UserRole {
+  return allowedRoles.includes(value as UserRole);
+}
 
 export const roleLabels: Record<UserRole, string> = {
   teacher: "Teacher",
   student: "Student",
-  admin: "Admin",
 };
 
 export const roleTools: Record<UserRole, string[]> = {
-  teacher: ["Lesson Plan", "Worksheet", "Email"],
-  student: ["Essay", "Notes", "Projects"],
-  admin: ["Reports", "Circulars"],
+  teacher: ["Lesson Plan", "Worksheet", "Question Paper", "Cheatsheet"],
+  student: ["Notes", "Cheatsheet", "Practice Questions"],
 };

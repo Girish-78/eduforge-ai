@@ -14,6 +14,7 @@ interface AuthFormProps {
 
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("student");
@@ -33,6 +34,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          ...(isLogin ? {} : { name }),
           email,
           password,
           ...(isLogin ? {} : { role }),
@@ -42,7 +44,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       const result = (await res.json()) as {
         message?: string;
         error?: string;
-        user?: { email: string; role: UserRole; plan?: "free" | "pro" };
+        user?: { email: string; name?: string; role: UserRole; plan?: "free" | "pro" };
       };
       if (!res.ok) {
         setMessage(result.error ?? "Something went wrong");
@@ -75,6 +77,21 @@ export function AuthForm({ mode }: AuthFormProps) {
       </p>
 
       <form className="space-y-4" onSubmit={onSubmit}>
+        {!isLogin ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Full Name
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring-2"
+              placeholder="Your full name"
+            />
+          </div>
+        ) : null}
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
             Email

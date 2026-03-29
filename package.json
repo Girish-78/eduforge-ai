@@ -11,15 +11,16 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@opentelemetry/api": "^1.9.0",
-    "@tiptap/react": "^3.20.4",
-    "@tiptap/starter-kit": "^3.20.4",
     "file-saver": "^2.0.5",
+    "firebase": "^12.11.0",
     "firebase-admin": "^13.7.0",
     "html-docx-js-typescript": "^0.1.5",
     "jspdf": "^4.2.1",
     "next": "16.2.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7"
   },
   "devDependencies": {

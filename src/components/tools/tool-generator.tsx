@@ -6,7 +6,7 @@ import jsPDF from "jspdf";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { GenerateType } from "@/lib/prompt-templates";
-import { RichTextEditor } from "@/components/tools/rich-text-editor";
+import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { LoadingDots } from "@/components/ui/loading-dots";
 
 interface ToolGeneratorProps {
@@ -188,7 +188,7 @@ export function ToolGenerator({
         ) : null}
         {output ? (
           <div className="space-y-3">
-            <RichTextEditor value={output} onChange={setOutput} />
+            <MarkdownPreview content={output} />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"

@@ -35,17 +35,15 @@ Modern full-stack SaaS starter built with:
 
 Supported roles:
 
-- Teacher -> Lesson Plan, Worksheet, Email
-- Student -> Essay, Notes, Projects
-- Admin -> Reports, Circulars
+- Teacher -> Lesson Plan, Worksheet, Question Paper, Cheatsheet
+- Student -> Notes, Cheatsheet, Practice Questions
 
 Signup requires selecting a role. Role is stored in Firestore and used to control dashboard tool visibility.
 
 Dashboard tool access:
 
-- Teacher: Lesson Plan, Worksheet, Email
-- Student: Essay, Notes, Projects
-- Admin: Reports, Circulars
+- Teacher: Lesson Plan, Worksheet, Question Paper, Cheatsheet
+- Student: Notes, Cheatsheet, Practice Questions
 
 Each tool has an individual page under `/dashboard/tools/*` with:
 

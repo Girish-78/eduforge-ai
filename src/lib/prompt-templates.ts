@@ -1,60 +1,86 @@
 export const allowedGenerateTypes = [
   "lesson_plan",
   "worksheet",
-  "email",
-  "essay",
+  "question_paper",
+  "cheatsheet",
+  "notes",
+  "practice_questions",
 ] as const;
 
 export type GenerateType = (typeof allowedGenerateTypes)[number];
 
-const templates: Record<GenerateType, string> = {
-  lesson_plan:
-    [
-      "Create a detailed CBSE lesson plan for {topic}.",
-      "Use clear sections: Learning Objectives, Prior Knowledge, Teaching-Learning Activities, Formative Assessment, Differentiation, Homework.",
-      "Map objectives to Bloom's taxonomy levels (Remember, Understand, Apply, Analyze, Evaluate, Create) with at least one objective in each relevant level.",
-      "Include competency-based tasks aligned to real classroom outcomes.",
-      "Add at least 3 HOTS (Higher Order Thinking Skills) questions.",
-      "Keep language teacher-friendly and practical for Indian school classrooms.",
-    ].join(" "),
-  worksheet:
-    [
-      "Generate a CBSE-style worksheet for {topic}.",
-      "Include conceptual, application-based, and numerical questions where relevant.",
-      "Organize by Bloom's taxonomy levels and clearly label the level for each section.",
-      "Include competency-based questions and at least 3 HOTS questions.",
-      "Provide answer key hints for teachers at the end.",
-      "Make it suitable for Indian school students.",
-    ].join(" "),
-  email: [
-    "Write a professional school email for {context}.",
-    "Tone should be clear, respectful, and suitable for Indian school communication.",
-    "Include subject line, greeting, concise body, call-to-action, and formal closing.",
-    "If context involves academics, include one competency-focused and one HOTS-oriented suggestion for parents/students.",
-  ].join(" "),
-  essay: [
-    "Write a well-structured CBSE-aligned essay on {topic} suitable for students.",
-    "Use introduction, body paragraphs, and conclusion with clear flow.",
-    "Incorporate Bloom's progression: basic understanding to analysis/evaluation.",
-    "Include competency-based examples from real life and at least 2 HOTS reflection prompts at the end.",
-    "Keep vocabulary age-appropriate for Indian school learners.",
-  ].join(" "),
-};
+const markdownOutputRules = [
+  "Output in STRICT Markdown only.",
+  "Never use LaTeX syntax like \\section, \\subsection, \\item, \\begin, \\end.",
+  "Use headings with ## and ### only.",
+  "Use bullet points with maximum 12 words per bullet.",
+  "Use Markdown tables when comparing or summarizing structured data.",
+  "Bold key academic terms and action words with **double asterisks**.",
+  "Keep writing clean, classroom-friendly, and easy to scan.",
+  "Do not output code fences unless explicitly requested.",
+].join(" ");
 
-const fieldByType: Record<GenerateType, string> = {
-  lesson_plan: "topic",
-  worksheet: "topic",
-  email: "context",
-  essay: "topic",
+const templates: Record<GenerateType, (input: string) => string> = {
+  lesson_plan: (input) =>
+    [
+      `Create a detailed CBSE lesson plan for: ${input}.`,
+      "Include sections for objectives, prior knowledge, activities, assessment, differentiation, and homework.",
+      "Map objectives to Bloom's taxonomy where relevant.",
+      "Add competency-based tasks and at least 3 HOTS questions.",
+      "Use practical examples suitable for Indian classrooms.",
+    ].join(" "),
+  worksheet: (input) =>
+    [
+      `Generate a CBSE-style worksheet for: ${input}.`,
+      "Include conceptual, application-based, and numerical questions when relevant.",
+      "Group content by Bloom's taxonomy levels with clear labels.",
+      "Include competency-based prompts and at least 3 HOTS questions.",
+      "Add a short answer key section for teachers.",
+    ].join(" "),
+  question_paper: (input) =>
+    [
+      `Create a school question paper for: ${input}.`,
+      "Include section-wise marks and total marks summary.",
+      "Balance easy, medium, and hard questions clearly.",
+      "Cover objective, short-answer, and long-answer question formats.",
+      "Add concise answer key points for teachers at the end.",
+    ].join(" "),
+  cheatsheet: (input) =>
+    [
+      `Generate a compact classroom cheatsheet for: ${input}.`,
+      "Prioritize formulas, key terms, definitions, and quick memory cues.",
+      "Include a summary table for fast revision.",
+      "Keep each bullet short and exam-focused.",
+    ].join(" "),
+  notes: (input) =>
+    [
+      `Generate student-friendly notes for: ${input}.`,
+      "Organize by concept headings with concise explanations.",
+      "Add one examples table and one recap section.",
+      "Use revision-focused language for school students.",
+    ].join(" "),
+  practice_questions: (input) =>
+    [
+      `Generate practice questions for: ${input}.`,
+      "Include at least 12 questions with mixed difficulty.",
+      "Add short hints or expected answer points after each question.",
+      "Provide a final self-check table for progress tracking.",
+    ].join(" "),
 };
 
 export function isGenerateType(value: string): value is GenerateType {
   return allowedGenerateTypes.includes(value as GenerateType);
 }
 
-export function buildPrompt(type: GenerateType, input: string) {
-  const field = fieldByType[type];
-  const normalized = input.trim();
-  return templates[type].replace(`{${field}}`, normalized);
+export function generatePrompt({
+  toolType,
+  inputs,
+}: {
+  toolType: GenerateType;
+  inputs: string;
+}) {
+  const normalized = inputs.trim();
+  const taskPrompt = templates[toolType](normalized);
+  return `${taskPrompt} ${markdownOutputRules}`;
 }
 

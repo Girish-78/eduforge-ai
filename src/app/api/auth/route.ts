@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAuth, getDb } from "@/lib/firebase-admin";
-import type { UserRole } from "@/lib/roles";
+import { isUserRole, type UserRole } from "@/lib/roles";
 
 interface AuthBody {
   mode?: "login" | "signup";
+  name?: string;
   email?: string;
   password?: string;
   role?: UserRole;
@@ -12,7 +13,7 @@ interface AuthBody {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as AuthBody;
-  const { mode, email, password, role } = body;
+  const { mode, name, email, password, role } = body;
 
   if (!mode || !email || !password) {
     return NextResponse.json(
@@ -36,17 +37,20 @@ export async function POST(request: Request) {
     const userRef = usersRef.doc(docId);
 
     if (mode === "signup") {
-      if (!role) {
+      if (!role || !isUserRole(role)) {
         return NextResponse.json(
-          { error: "Role is required for signup" },
+          { error: "A valid role is required for signup" },
           { status: 400 },
         );
       }
+
+      const displayName = name?.trim() || email.split("@")[0];
 
       try {
         await auth.createUser({
           email: docId,
           password,
+          displayName,
         });
       } catch (createUserError) {
         const code =
@@ -68,6 +72,7 @@ export async function POST(request: Request) {
 
       await userRef.set({
         email: docId,
+        name: displayName,
         role,
         plan: "free",
         updatedAt: Timestamp.now(),
@@ -76,7 +81,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         message: `Account created for ${email}`,
-        user: { email: docId, role, plan: "free" },
+        user: { email: docId, name: displayName, role, plan: "free" },
       });
     }
 
@@ -108,17 +113,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = userDoc.data() as { role?: UserRole; plan?: "free" | "pro" };
-    if (!user.role) {
+    const user = userDoc.data() as {
+      name?: string;
+      role?: UserRole;
+      plan?: "free" | "pro";
+    };
+    if (!user.role || !isUserRole(user.role)) {
       return NextResponse.json(
         { error: "User role missing. Please contact support." },
         { status: 500 },
       );
     }
 
+    const displayName = user.name?.trim() || docId.split("@")[0];
+
     return NextResponse.json({
       message: `Logged in as ${email}`,
-      user: { email: docId, role: user.role, plan: user.plan ?? "free" },
+      user: {
+        email: docId,
+        name: displayName,
+        role: user.role,
+        plan: user.plan ?? "free",
+      },
     });
   } catch (error) {
     console.error("Auth route error", error);

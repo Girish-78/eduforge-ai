@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { LoadingDots } from "@/components/ui/loading-dots";
 
 interface SavedDocument {
@@ -164,18 +165,7 @@ export default function DocumentsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Output</p>
-              {selected.type === "image" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selected.output}
-                  alt="Saved generated"
-                  className="mt-1 w-full rounded-lg border border-slate-200"
-                />
-              ) : (
-                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-sm text-slate-100">
-                  {selected.output}
-                </pre>
-              )}
+              <MarkdownPreview content={selected.output} />
             </div>
           </div>
         ) : (

@@ -7,23 +7,19 @@ import { roleLabels, roleTools, type UserRole } from "@/lib/roles";
 const toolDescriptions: Record<string, string> = {
   "Lesson Plan": "Build structured daily/weekly class plans in seconds.",
   Worksheet: "Create classroom worksheets with questions and activities.",
-  Email: "Draft professional parent or student communication quickly.",
-  Essay: "Generate essay drafts with clear structure and flow.",
   Notes: "Summarize concepts into clear revision notes.",
-  Projects: "Create project outlines, milestones, and deliverables.",
-  Reports: "Generate admin reports with concise highlights.",
-  Circulars: "Draft official notices for students and staff.",
+  "Question Paper": "Generate exam-ready papers with balanced difficulty levels.",
+  Cheatsheet: "Create quick, high-retention revision sheets.",
+  "Practice Questions": "Prepare targeted practice sets with answer guidance.",
 };
 
 const toolRouteByName: Record<string, string> = {
   "Lesson Plan": "/dashboard/tools/lesson-plan",
   Worksheet: "/dashboard/tools/worksheet",
-  Email: "/dashboard/tools/email",
-  Essay: "/dashboard/tools/essay",
   Notes: "/dashboard/tools/notes",
-  Projects: "/dashboard/tools/projects",
-  Reports: "/dashboard/tools/reports",
-  Circulars: "/dashboard/tools/circulars",
+  "Question Paper": "/dashboard/tools/question-paper",
+  Cheatsheet: "/dashboard/tools/cheatsheet",
+  "Practice Questions": "/dashboard/tools/practice-questions",
 };
 
 export default function DashboardPage() {
