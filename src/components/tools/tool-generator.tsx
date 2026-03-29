@@ -8,11 +8,15 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import {
+  buildPdfExportPages,
+  createPrintDocumentMarkup,
+  pdfExportPageSize,
+  PDF_EXPORT_SCALE,
+  resolveLogoDataUrl,
+} from "@/lib/pdf-export";
 import type { GenerateType } from "@/lib/prompt-templates";
 
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
-const PDF_EXPORT_SCALE = 2;
 const EXPORT_DOCX_STYLES = `
   body {
     margin: 0;
@@ -59,11 +63,6 @@ const EXPORT_DOCX_STYLES = `
     vertical-align: top;
   }
 
-  #pdf-content [data-pdf-header],
-  #pdf-content [data-pdf-footer] {
-    width: 100%;
-  }
-
   #pdf-content .pdf-table-wrapper {
     overflow: hidden;
   }
@@ -81,6 +80,12 @@ interface SessionUser {
   name?: string;
 }
 
+interface ProfilePayload {
+  user?: {
+    logoUrl?: string | null;
+  };
+}
+
 function sanitizeFileName(value: string) {
   return value
     .toLowerCase()
@@ -94,122 +99,26 @@ function getPrintableSource() {
   return document.getElementById("pdf-content");
 }
 
-function createHiddenRenderRoot() {
-  const renderRoot = document.createElement("div");
-  Object.assign(renderRoot.style, {
-    position: "fixed",
-    top: "0",
-    left: "-10000px",
-    width: `${A4_WIDTH_PX}px`,
-    pointerEvents: "none",
-    opacity: "0",
-    zIndex: "-1",
-    background: "#ffffff",
-  });
-
-  document.body.appendChild(renderRoot);
-  return renderRoot;
-}
-
-function createPdfPage(
-  renderRoot: HTMLDivElement,
-  headerTemplate: HTMLElement,
-  footerTemplate: HTMLElement,
-) {
-  const page = document.createElement("div");
-  Object.assign(page.style, {
-    width: `${A4_WIDTH_PX}px`,
-    height: `${A4_HEIGHT_PX}px`,
-    boxSizing: "border-box",
-    padding: "46px 50px 38px",
-    background: "#ffffff",
-    color: "#0f172a",
-    fontFamily: "Arial, sans-serif",
-    lineHeight: "1.6",
-    display: "flex",
-    flexDirection: "column",
-    gap: "20px",
-    overflow: "hidden",
-  });
-
-  const header = headerTemplate.cloneNode(true) as HTMLElement;
-  const body = document.createElement("div");
-  Object.assign(body.style, {
-    flex: "1",
-    minHeight: "0",
-    display: "flex",
-    flexDirection: "column",
-  });
-
-  const footer = footerTemplate.cloneNode(true) as HTMLElement;
-  footer.style.marginTop = "auto";
-
-  page.append(header, body, footer);
-  renderRoot.appendChild(page);
-
-  return { page, body };
-}
-
-function updatePageNumbers(pages: HTMLDivElement[]) {
-  pages.forEach((page, index) => {
-    const label = page.querySelector("[data-pdf-page-number-label]");
-    if (label) {
-      label.textContent = `Page ${index + 1} of ${pages.length}`;
-    }
-  });
-}
-
-function shouldStartNewPageBeforeBlock(block: HTMLElement, currentPageBody: HTMLElement) {
-  return block.tagName === "H2" && currentPageBody.childElementCount > 0;
-}
-
-function buildPdfPages(source: HTMLElement) {
-  const headerTemplate = source.querySelector("[data-pdf-header]");
-  const bodyTemplate = source.querySelector("[data-pdf-body]");
-  const footerTemplate = source.querySelector("[data-pdf-footer]");
-
-  if (!(headerTemplate instanceof HTMLElement)) {
-    throw new Error("Printable header is missing.");
+async function getUserLogoUrl(userId: string) {
+  if (!userId) {
+    return null;
   }
 
-  if (!(bodyTemplate instanceof HTMLElement)) {
-    throw new Error("Printable body is missing.");
-  }
+  try {
+    const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
+      cache: "no-store",
+    });
 
-  if (!(footerTemplate instanceof HTMLElement)) {
-    throw new Error("Printable footer is missing.");
-  }
-
-  const renderRoot = createHiddenRenderRoot();
-  const pages: HTMLDivElement[] = [];
-  let currentPage = createPdfPage(renderRoot, headerTemplate, footerTemplate);
-  pages.push(currentPage.page);
-
-  const blocks = Array.from(bodyTemplate.children) as HTMLElement[];
-
-  for (const block of blocks) {
-    if (shouldStartNewPageBeforeBlock(block, currentPage.body)) {
-      currentPage = createPdfPage(renderRoot, headerTemplate, footerTemplate);
-      pages.push(currentPage.page);
+    if (!response.ok) {
+      return null;
     }
 
-    const clonedBlock = block.cloneNode(true) as HTMLElement;
-    currentPage.body.appendChild(clonedBlock);
-
-    if (
-      currentPage.body.scrollHeight > currentPage.body.clientHeight + 1 &&
-      currentPage.body.childElementCount > 1
-    ) {
-      currentPage.body.removeChild(clonedBlock);
-      currentPage = createPdfPage(renderRoot, headerTemplate, footerTemplate);
-      pages.push(currentPage.page);
-      currentPage.body.appendChild(block.cloneNode(true) as HTMLElement);
-    }
+    const payload = (await response.json()) as ProfilePayload;
+    return payload.user?.logoUrl ?? null;
+  } catch (error) {
+    console.error("getUserLogoUrl error", error);
+    return null;
   }
-
-  updatePageNumbers(pages);
-
-  return { pages, renderRoot };
 }
 
 export function ToolGenerator({
@@ -238,11 +147,6 @@ export function ToolGenerator({
 
   const userId = session?.email ?? "";
   const documentTitle = input.trim() || title;
-  const dateLabel = new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date());
 
   async function onGenerate() {
     setError("");
@@ -302,6 +206,21 @@ export function ToolGenerator({
     }
   }
 
+  async function createExportPages() {
+    const source = getPrintableSource();
+    if (!source) {
+      throw new Error("Printable content not found.");
+    }
+
+    const logoUrl = await getUserLogoUrl(userId);
+    const logoDataUrl = await resolveLogoDataUrl(logoUrl);
+
+    return buildPdfExportPages({
+      source,
+      logoDataUrl,
+    });
+  }
+
   async function downloadPDF() {
     if (!output.trim()) {
       setError("Generate content first to export.");
@@ -310,33 +229,36 @@ export function ToolGenerator({
 
     const source = getPrintableSource();
     if (!source) {
-      setError("Unable to find printable content.");
+      setError("Unable to export PDF. Printable content is missing.");
+      toast.error("Unable to export PDF. Printable content is missing.");
       return;
     }
 
-    let renderRoot: HTMLDivElement | null = null;
+    let cleanup: (() => void) | null = null;
 
     try {
-      const builtPages = buildPdfPages(source);
-      renderRoot = builtPages.renderRoot;
+      const exportPages = await createExportPages();
+      cleanup = exportPages.cleanup;
 
-      await new Promise<void>((resolve) => {
-        window.requestAnimationFrame(() => resolve());
-      });
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
 
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
-      for (const [index, page] of builtPages.pages.entries()) {
+      for (const [index, page] of exportPages.pages.entries()) {
+        if (!page) {
+          throw new Error(`Missing export page at index ${index}.`);
+        }
+
         const canvas = await html2canvas(page, {
           scale: PDF_EXPORT_SCALE,
           useCORS: true,
           backgroundColor: "#ffffff",
-          width: A4_WIDTH_PX,
-          height: A4_HEIGHT_PX,
-          windowWidth: A4_WIDTH_PX,
-          windowHeight: A4_HEIGHT_PX,
+          width: pdfExportPageSize.width,
+          height: pdfExportPageSize.height,
+          windowWidth: pdfExportPageSize.width,
+          windowHeight: pdfExportPageSize.height,
         });
 
         if (index > 0) {
@@ -358,11 +280,11 @@ export function ToolGenerator({
       pdf.save(`${sanitizeFileName(documentTitle)}.pdf`);
       toast.success("PDF downloaded");
     } catch (downloadError) {
-      console.error(downloadError);
-      setError("Unable to export PDF.");
-      toast.error("Unable to export PDF.");
+      console.error("downloadPDF error", downloadError);
+      setError("Unable to export PDF. Please try again.");
+      toast.error("Unable to export PDF. Please try again.");
     } finally {
-      renderRoot?.remove();
+      cleanup?.();
     }
   }
 
@@ -390,23 +312,56 @@ export function ToolGenerator({
     toast.success("DOCX downloaded");
   }
 
-  function printPDF() {
+  async function printPDF() {
     if (!output.trim()) {
       setError("Generate content first to print.");
       return;
     }
 
-    window.print();
+    const source = getPrintableSource();
+    if (!source) {
+      setError("Unable to print. Printable content is missing.");
+      toast.error("Unable to print. Printable content is missing.");
+      return;
+    }
+
+    let cleanup: (() => void) | null = null;
+
+    try {
+      const exportPages = await createExportPages();
+      cleanup = exportPages.cleanup;
+
+      const printWindow = window.open("", "_blank", "noopener,noreferrer");
+      if (!printWindow) {
+        throw new Error("Print window was blocked by the browser.");
+      }
+
+      const markup = exportPages.pages.map((page) => page.outerHTML).join("");
+      printWindow.document.open();
+      printWindow.document.write(createPrintDocumentMarkup(markup));
+      printWindow.document.close();
+      printWindow.focus();
+
+      window.setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    } catch (printError) {
+      console.error("printPDF error", printError);
+      setError("Unable to print PDF. Please try again.");
+      toast.error("Unable to print PDF. Please try again.");
+    } finally {
+      cleanup?.();
+    }
   }
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-5">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:hidden">
+      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
         <p className="mt-1 text-sm text-slate-600">{description}</p>
       </header>
 
-      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:hidden">
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="mb-2 block text-sm font-medium text-slate-700">Input</label>
         <textarea
           rows={7}
@@ -430,28 +385,22 @@ export function ToolGenerator({
         ) : null}
       </article>
 
-      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm print:border-0 print:bg-transparent print:p-0 print:shadow-none">
-        <h2 className="mb-2 text-lg font-semibold text-slate-900 print:hidden">Output</h2>
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-2 text-lg font-semibold text-slate-900">Output</h2>
         {error ? (
-          <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 print:hidden">
+          <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
           </p>
         ) : null}
         {usageWarning ? (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 print:hidden">
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
             {usageWarning}
           </p>
         ) : null}
         {output ? (
           <div className="space-y-3">
-            <MarkdownPreview
-              content={output}
-              contentId="pdf-content"
-              documentTitle={documentTitle}
-              schoolName="Your School"
-              dateLabel={dateLabel}
-            />
-            <div className="flex flex-wrap gap-2 print:hidden">
+            <MarkdownPreview content={output} contentId="pdf-content" />
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={downloadPDF}
@@ -476,9 +425,7 @@ export function ToolGenerator({
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-600 print:hidden">
-            Generated content will appear here.
-          </p>
+          <p className="text-sm text-slate-600">Generated content will appear here.</p>
         )}
       </article>
     </section>

@@ -5,7 +5,7 @@ const items = [
   { href: "/dashboard", label: "Overview", icon: "grid" },
   { href: "/dashboard/tools/lesson-plan", label: "AI Tools", icon: "spark" },
   { href: "/dashboard/documents", label: "My Documents", icon: "chart" },
-  { href: "#", label: "Settings", icon: "settings" },
+  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
 function ItemIcon({ name }: { name: string }) {
