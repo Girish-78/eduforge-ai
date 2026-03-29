@@ -2,6 +2,7 @@
 
 import { saveAs } from "file-saver";
 import htmlDocx from "html-docx-js-typescript";
+import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -104,23 +105,98 @@ export function ToolGenerator({
       return;
     }
 
-    const tempContainer = document.createElement("div");
-    tempContainer.style.width = "794px";
-    tempContainer.style.padding = "24px";
-    tempContainer.style.background = "#ffffff";
-    tempContainer.innerHTML = output;
-    document.body.appendChild(tempContainer);
+    const source = document.getElementById("pdf-content");
+    if (!source) {
+      setError("Unable to find printable content.");
+      return;
+    }
 
-    const pdf = new jsPDF("p", "pt", "a4");
-    await pdf.html(tempContainer, {
-      margin: [24, 24, 24, 24],
-      autoPaging: "text",
-      callback: (doc) => {
-        doc.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
-        toast.success("PDF downloaded");
-      },
+    const scale = 3;
+    const canvas = await html2canvas(source, {
+      scale,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      windowWidth: source.scrollWidth,
+      width: source.scrollWidth,
     });
-    document.body.removeChild(tempContainer);
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const printableWidth = pageWidth - margin * 2;
+    const printableHeight = pageHeight - margin * 2;
+    const pxPerMm = canvas.width / printableWidth;
+    const pageHeightPx = Math.floor(printableHeight * pxPerMm);
+
+    const sourceRect = source.getBoundingClientRect();
+    const tableRanges = Array.from(source.querySelectorAll("table")).map((table) => {
+      const rect = table.getBoundingClientRect();
+      const top = Math.max(0, Math.floor((rect.top - sourceRect.top) * scale));
+      const bottom = Math.min(canvas.height, Math.ceil((rect.bottom - sourceRect.top) * scale));
+      return { top, bottom };
+    });
+
+    function adjustPageEnd(start: number, proposedEnd: number) {
+      let adjustedEnd = proposedEnd;
+      for (const range of tableRanges) {
+        const intersects = range.top < proposedEnd && range.bottom > proposedEnd;
+        const canMoveBeforeTable = range.top - start > 80;
+        if (intersects && canMoveBeforeTable) {
+          adjustedEnd = Math.min(adjustedEnd, range.top);
+        }
+      }
+      if (adjustedEnd <= start + 40) {
+        return proposedEnd;
+      }
+      return adjustedEnd;
+    }
+
+    let offsetY = 0;
+    let pageIndex = 0;
+
+    while (offsetY < canvas.height) {
+      const maxEnd = Math.min(offsetY + pageHeightPx, canvas.height);
+      const sliceEnd = adjustPageEnd(offsetY, maxEnd);
+      const sliceHeight = Math.max(1, sliceEnd - offsetY);
+
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeight;
+
+      const ctx = pageCanvas.getContext("2d");
+      if (!ctx) {
+        setError("Unable to prepare PDF canvas.");
+        return;
+      }
+
+      ctx.drawImage(
+        canvas,
+        0,
+        offsetY,
+        canvas.width,
+        sliceHeight,
+        0,
+        0,
+        canvas.width,
+        sliceHeight,
+      );
+
+      const imageData = pageCanvas.toDataURL("image/png");
+      const imageHeightMm = sliceHeight / pxPerMm;
+
+      if (pageIndex > 0) {
+        pdf.addPage();
+      }
+
+      pdf.addImage(imageData, "PNG", margin, margin, printableWidth, imageHeightMm);
+
+      offsetY += sliceHeight;
+      pageIndex += 1;
+    }
+
+    pdf.save(`${title.toLowerCase().replace(/\s+/g, "-")}.pdf`);
+    toast.success("PDF downloaded");
   }
 
   async function onDownloadDocx() {
@@ -188,7 +264,7 @@ export function ToolGenerator({
         ) : null}
         {output ? (
           <div className="space-y-3">
-            <MarkdownPreview content={output} />
+            <MarkdownPreview content={output} contentId="pdf-content" />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
