@@ -113,7 +113,12 @@ function sanitizeFileName(value: string) {
 }
 
 function getPrintableSource() {
-  return document.getElementById("pdf-content");
+  const element = document.getElementById("pdf-content");
+  if (!element) {
+    throw new Error("Unable to export PDF: #pdf-content was not found.");
+  }
+
+  return element;
 }
 
 function wait(delay: number) {
@@ -128,6 +133,29 @@ function summarizeFiles(files: File[]) {
     size: file.size,
     type: file.type,
   }));
+}
+
+function preparePdfContentForExport(element: HTMLElement) {
+  const original = {
+    width: element.style.width,
+    maxWidth: element.style.maxWidth,
+    overflow: element.style.overflow,
+    maxHeight: element.style.maxHeight,
+  };
+
+  element.classList.add("pdf-export-ready");
+  element.style.width = `${pdfExportPageSize.width}px`;
+  element.style.maxWidth = `${pdfExportPageSize.width}px`;
+  element.style.overflow = "visible";
+  element.style.maxHeight = "none";
+
+  return () => {
+    element.classList.remove("pdf-export-ready");
+    element.style.width = original.width;
+    element.style.maxWidth = original.maxWidth;
+    element.style.overflow = original.overflow;
+    element.style.maxHeight = original.maxHeight;
+  };
 }
 
 export function ToolGenerator({ tool }: ToolGeneratorProps) {
@@ -263,31 +291,50 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
   async function ensurePrintableContent() {
     const source = getPrintableSource();
-    if (!source) {
-      throw new Error("Printable content not found.");
-    }
+    const restoreSource = preparePdfContentForExport(source);
 
-    await waitForImages(source);
-    await wait(400);
-    return source;
+    try {
+      await waitForImages(source);
+      await wait(500);
+      return {
+        source,
+        restoreSource,
+      };
+    } catch (error) {
+      restoreSource();
+      throw error;
+    }
   }
 
   async function createExportPages() {
-    const source = await ensurePrintableContent();
-    const logoDataUrl = await resolveLogoDataUrl(logoUrl);
-    const exportPages = await buildPdfExportPages({
-      source,
-      logoDataUrl,
-      headerData: {
-        schoolName: values.schoolName,
-        subject: values.subject,
-        className: values.className,
-      },
-    });
+    const { source, restoreSource } = await ensurePrintableContent();
 
-    await waitForImages(exportPages.root);
-    await wait(400);
-    return exportPages;
+    try {
+      const logoDataUrl = await resolveLogoDataUrl(logoUrl);
+      const exportPages = await buildPdfExportPages({
+        source,
+        logoDataUrl,
+        headerData: {
+          schoolName: values.schoolName,
+          subject: values.subject,
+          className: values.className,
+        },
+      });
+
+      await waitForImages(exportPages.root);
+      await wait(500);
+
+      return {
+        ...exportPages,
+        cleanup() {
+          exportPages.cleanup();
+          restoreSource();
+        },
+      };
+    } catch (error) {
+      restoreSource();
+      throw error;
+    }
   }
 
   async function downloadPDF() {
@@ -310,6 +357,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
         const canvas = await html2canvas(page, {
           scale: PDF_EXPORT_SCALE,
           useCORS: true,
+          allowTaint: false,
           backgroundColor: "#ffffff",
           width: pdfExportPageSize.width,
           height: pdfExportPageSize.height,
@@ -336,7 +384,11 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       pdf.save(`${sanitizeFileName(documentTitle)}.pdf`);
       toast.success("PDF downloaded");
     } catch (downloadError) {
-      console.error("downloadPDF error", downloadError);
+      console.error("downloadPDF error", {
+        message:
+          downloadError instanceof Error ? downloadError.message : "Unknown PDF export error",
+        error: downloadError,
+      });
       setError("Unable to export PDF. Please try again.");
       toast.error("Unable to export PDF. Please try again.");
     } finally {
@@ -494,4 +546,3 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     </section>
   );
 }
-

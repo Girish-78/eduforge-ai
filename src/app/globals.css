@@ -56,12 +56,15 @@ h4 {
 }
 
 #pdf-content {
+  width: 100%;
   max-width: 794px;
   margin: 0 auto;
   font-family: Arial, sans-serif;
   font-size: 15px;
   line-height: 1.6;
   color: #0f172a;
+  overflow: visible;
+  max-height: none;
 }
 
 #pdf-content h1,
@@ -106,4 +109,15 @@ h4 {
 #pdf-content th {
   break-inside: avoid;
   page-break-inside: avoid;
+}
+
+#pdf-content.pdf-export-ready,
+#pdf-content.pdf-export-ready .pdf-table-wrapper,
+#pdf-content.pdf-export-ready table,
+#pdf-content.pdf-export-ready tbody,
+#pdf-content.pdf-export-ready tr,
+#pdf-content.pdf-export-ready td,
+#pdf-content.pdf-export-ready th {
+  overflow: visible !important;
+  max-height: none !important;
 }
