@@ -1,29 +1,26 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase-admin";
+import { getServerSessionUser } from "@/lib/session";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId")?.trim();
+    const session = await getServerSessionUser();
 
-    if (!userId) {
+    if (!session) {
       return NextResponse.json(
-        { success: false, error: "userId query param is required." },
-        { status: 400 },
+        { success: false, error: "Please login to view documents." },
+        { status: 401 },
       );
     }
 
     const db = getDb();
-    const snapshot = await db
-      .collection("documents")
-      .where("userId", "==", userId)
-      .orderBy("timestamp", "desc")
-      .get();
+    const snapshot = await db.collection("documents").where("userId", "==", session.email).get();
 
     const documents = snapshot.docs.map((doc) => {
       const data = doc.data() as {
         userId: string;
         type: string;
+        title?: string;
         input: string;
         output: string;
         timestamp?: { toDate?: () => Date };
@@ -32,10 +29,26 @@ export async function GET(request: Request) {
         id: doc.id,
         userId: data.userId,
         type: data.type,
+        title: data.title ?? "",
         input: data.input,
         output: data.output,
         timestamp: data.timestamp?.toDate?.().toISOString() ?? null,
       };
+    })
+    .sort((left, right) => {
+      if (!left.timestamp && !right.timestamp) {
+        return 0;
+      }
+
+      if (!left.timestamp) {
+        return 1;
+      }
+
+      if (!right.timestamp) {
+        return -1;
+      }
+
+      return right.timestamp.localeCompare(left.timestamp);
     });
 
     return NextResponse.json({ success: true, documents });
@@ -50,13 +63,20 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const body = (await request.json()) as { id?: string; userId?: string };
+    const session = await getServerSessionUser();
+    const body = (await request.json()) as { id?: string };
     const id = body.id?.trim();
-    const userId = body.userId?.trim();
 
-    if (!id || !userId) {
+    if (!session) {
       return NextResponse.json(
-        { success: false, error: "id and userId are required." },
+        { success: false, error: "Please login to manage documents." },
+        { status: 401 },
+      );
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: "Document id is required." },
         { status: 400 },
       );
     }
@@ -73,7 +93,7 @@ export async function DELETE(request: Request) {
     }
 
     const data = doc.data() as { userId?: string };
-    if (data.userId !== userId) {
+    if (data.userId !== session.email) {
       return NextResponse.json(
         { success: false, error: "Not authorized to delete this document." },
         { status: 403 },

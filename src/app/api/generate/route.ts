@@ -7,20 +7,23 @@ import {
   isGenerateType,
   type GenerateType,
 } from "@/lib/prompt-templates";
+import { getServerSessionUser } from "@/lib/session";
+import { userCanAccessTool } from "@/lib/tools";
 import { consumeUsage } from "@/lib/usage";
 
 interface GenerateBody {
   type?: GenerateType;
   input?: string;
-  userId?: string;
+  title?: string;
 }
 
 export async function POST(request: Request) {
   try {
+    const session = await getServerSessionUser();
     const body = (await request.json()) as GenerateBody;
     const type = body.type;
     const input = body.input?.trim();
-    const userId = body.userId?.trim();
+    const title = body.title?.trim();
 
     if (!type || !isGenerateType(type)) {
       return NextResponse.json(
@@ -39,14 +42,24 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!userId) {
+    if (!session) {
       return NextResponse.json(
-        { success: false, error: "userId is required." },
-        { status: 400 },
+        { success: false, error: "Please login before generating content." },
+        { status: 401 },
       );
     }
 
-    const usage = await consumeUsage(userId);
+    if (!userCanAccessTool(session.role, type)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This tool is not available for your role.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const usage = await consumeUsage(session.email);
     if (!usage.allowed) {
       return NextResponse.json(
         {
@@ -82,14 +95,15 @@ export async function POST(request: Request) {
 
     const db = getDb();
     await db.collection("documents").add({
-      userId,
+      userId: session.email,
       type,
+      title: title ?? "",
       input,
       output: text,
       timestamp: Timestamp.now(),
     });
 
-    return NextResponse.json({ output: text });
+    return NextResponse.json({ output: text, usage });
   } catch (error) {
     console.error("/api/generate error", error);
     return NextResponse.json(

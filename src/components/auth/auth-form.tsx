@@ -55,6 +55,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         if (result.user) {
           localStorage.setItem("saas-user", JSON.stringify(result.user));
           router.push("/dashboard");
+          router.refresh();
         }
       }
     } catch {

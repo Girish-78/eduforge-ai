@@ -1,32 +1,26 @@
 "use client";
 
 import { signOut } from "firebase/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { roleLabels, type UserRole } from "@/lib/roles";
 import { getFirebaseClientAuth } from "@/lib/firebase-client";
+import type { SessionUser } from "@/lib/session";
 
-interface SessionUser {
+interface SessionUserState {
   name?: string;
   email?: string;
   role?: UserRole;
 }
 
-export function UserProfileMenu() {
+export function UserProfileMenu({
+  initialSession,
+}: {
+  initialSession: SessionUser | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [session, setSession] = useState<SessionUser | null>(null);
-
-  useEffect(() => {
-    const raw = localStorage.getItem("saas-user");
-    if (!raw) return;
-
-    try {
-      setSession(JSON.parse(raw) as SessionUser);
-    } catch {
-      localStorage.removeItem("saas-user");
-    }
-  }, []);
+  const [session] = useState<SessionUserState | null>(initialSession);
 
   const displayName = useMemo(() => {
     if (!session?.name?.trim()) return session?.email?.split("@")[0] ?? "User";
@@ -40,6 +34,11 @@ export function UserProfileMenu() {
     } catch (error) {
       console.error("Client signOut fallback", error);
     } finally {
+      try {
+        await fetch("/api/auth", { method: "DELETE" });
+      } catch (error) {
+        console.error("Session cookie clear failed", error);
+      }
       localStorage.removeItem("saas-user");
       router.push("/login");
       router.refresh();

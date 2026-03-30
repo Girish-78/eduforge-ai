@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/ui/brand-logo";
+import { getServerSessionUser } from "@/lib/session";
+import { getToolsForRole } from "@/lib/tools";
 
 const items = [
   { href: "/dashboard", label: "Overview", icon: "grid" },
-  { href: "/dashboard/tools/lesson-plan", label: "AI Tools", icon: "spark" },
+  { href: "/dashboard/tools", label: "AI Tools", icon: "spark" },
   { href: "/dashboard/documents", label: "My Documents", icon: "chart" },
   { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
@@ -47,7 +49,10 @@ function ItemIcon({ name }: { name: string }) {
   );
 }
 
-export function DashboardSidebar() {
+export async function DashboardSidebar() {
+  const session = await getServerSessionUser();
+  const roleTools = session ? getToolsForRole(session.role) : [];
+
   return (
     <aside className="w-full border-b border-slate-200 bg-white/95 p-4 backdrop-blur md:h-screen md:w-72 md:border-b-0 md:border-r">
       <div className="mb-6 rounded-xl border border-indigo-100 bg-white p-4">
@@ -55,6 +60,11 @@ export function DashboardSidebar() {
         <div className="mt-1">
           <BrandLogo compact />
         </div>
+        {session ? (
+          <p className="mt-3 text-xs text-slate-500">
+            {roleTools.length} AI tool{roleTools.length === 1 ? "" : "s"} enabled for your role.
+          </p>
+        ) : null}
       </div>
       <nav className="flex flex-wrap gap-2 md:flex-col">
         {items.map((item) => (

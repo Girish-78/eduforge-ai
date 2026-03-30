@@ -2,24 +2,20 @@ import { randomUUID } from "crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { getDb, getStorageBucket } from "@/lib/firebase-admin";
+import { getServerSessionUser } from "@/lib/session";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-function getUserId(request: Request) {
-  const { searchParams } = new URL(request.url);
-  return searchParams.get("userId")?.trim().toLowerCase() ?? "";
-}
-
-export async function GET(request: Request) {
-  const userId = getUserId(request);
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required." }, { status: 400 });
+export async function GET() {
+  const session = await getServerSessionUser();
+  if (!session) {
+    return NextResponse.json({ error: "Please login to view your profile." }, { status: 401 });
   }
 
   try {
     const db = getDb();
-    const userDoc = await db.collection("users").doc(userId).get();
+    const userDoc = await db.collection("users").doc(session.email).get();
 
     if (!userDoc.exists) {
       return NextResponse.json({ error: "User profile not found." }, { status: 404 });
@@ -28,7 +24,7 @@ export async function GET(request: Request) {
     const data = userDoc.data() ?? {};
     return NextResponse.json({
       user: {
-        email: userId,
+        email: session.email,
         name: data.name ?? "",
         role: data.role ?? null,
         plan: data.plan ?? "free",
@@ -46,13 +42,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const userId = String(formData.get("userId") ?? "").trim().toLowerCase();
-    const file = formData.get("logo");
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required." }, { status: 400 });
+    const session = await getServerSessionUser();
+    if (!session) {
+      return NextResponse.json(
+        { error: "Please login to update your profile." },
+        { status: 401 },
+      );
     }
+
+    const formData = await request.formData();
+    const file = formData.get("logo");
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Logo file is required." }, { status: 400 });
@@ -74,15 +73,14 @@ export async function POST(request: Request) {
 
     const db = getDb();
     const bucket = getStorageBucket();
-    const userRef = db.collection("users").doc(userId);
+    const userRef = db.collection("users").doc(session.email);
     const existingDoc = await userRef.get();
 
     if (!existingDoc.exists) {
       return NextResponse.json({ error: "User profile not found." }, { status: 404 });
     }
 
-    const extension = file.type === "image/png" ? "png" : "jpg";
-    const objectPath = `logos/${encodeURIComponent(userId)}/${Date.now()}-${randomUUID()}.${extension}`;
+    const objectPath = `users/${session.email}/logo.png`;
     const token = randomUUID();
     const buffer = Buffer.from(await file.arrayBuffer());
     const uploadedFile = bucket.file(objectPath);

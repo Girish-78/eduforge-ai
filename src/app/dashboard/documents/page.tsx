@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -9,24 +9,13 @@ interface SavedDocument {
   id: string;
   userId: string;
   type: string;
+  title: string;
   input: string;
   output: string;
   timestamp: string | null;
 }
 
 export default function DocumentsPage() {
-  const userId = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const raw = localStorage.getItem("saas-user");
-    if (!raw) return "";
-    try {
-      const parsed = JSON.parse(raw) as { email?: string };
-      return parsed.email ?? "";
-    } catch {
-      return "";
-    }
-  }, []);
-
   const [documents, setDocuments] = useState<SavedDocument[]>([]);
   const [selected, setSelected] = useState<SavedDocument | null>(null);
   const [error, setError] = useState("");
@@ -34,17 +23,10 @@ export default function DocumentsPage() {
   const [deletingId, setDeletingId] = useState("");
 
   const loadDocuments = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(
-        `/api/documents?userId=${encodeURIComponent(userId)}`,
-      );
+      const res = await fetch("/api/documents", { cache: "no-store" });
       const payload = (await res.json()) as {
         success?: boolean;
         documents?: SavedDocument[];
@@ -55,24 +37,32 @@ export default function DocumentsPage() {
         setError(payload.error ?? "Failed to load documents.");
         toast.error(payload.error ?? "Failed to load documents.");
       } else {
-        setDocuments(payload.documents ?? []);
+        const nextDocuments = payload.documents ?? [];
+        setDocuments(nextDocuments);
+        setSelected((current) => {
+          if (current) {
+            return nextDocuments.find((doc) => doc.id === current.id) ?? null;
+          }
+
+          return nextDocuments[0] ?? null;
+        });
       }
-    } catch {
+    } catch (loadError) {
+      console.error("DocumentsPage loadDocuments error", loadError);
       setError("Unable to load documents.");
       toast.error("Unable to load documents.");
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, []);
 
   async function onDelete(id: string) {
-    if (!userId) return;
     setDeletingId(id);
     try {
       const res = await fetch("/api/documents", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, userId }),
+        body: JSON.stringify({ id }),
       });
       const payload = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !payload.success) {
@@ -85,7 +75,8 @@ export default function DocumentsPage() {
         }
         toast.success("Document deleted");
       }
-    } catch {
+    } catch (deleteError) {
+      console.error("DocumentsPage onDelete error", deleteError);
       setError("Unable to delete document.");
       toast.error("Unable to delete document.");
     } finally {
@@ -130,10 +121,10 @@ export default function DocumentsPage() {
                   className="w-full text-left"
                 >
                   <p className="text-sm font-semibold capitalize text-slate-900">
-                    {doc.type.replace("_", " ")}
+                    {doc.title || doc.type.replace("_", " ")}
                   </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {doc.input}
+                  <p className="mt-1 whitespace-pre-line text-xs text-slate-600">
+                    {doc.input.split("\n").slice(0, 3).join("\n")}
                   </p>
                   <p className="mt-1 text-[11px] text-slate-400">
                     {doc.timestamp
@@ -161,7 +152,9 @@ export default function DocumentsPage() {
           <div className="mt-3 space-y-3">
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Input</p>
-              <p className="mt-1 text-sm text-slate-700">{selected.input}</p>
+              <p className="mt-1 whitespace-pre-line text-sm text-slate-700">
+                {selected.input}
+              </p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Output</p>

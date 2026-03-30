@@ -4,22 +4,32 @@ import { saveAs } from "file-saver";
 import htmlDocx from "html-docx-js-typescript";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
+import { ToolInputForm } from "@/components/tools/tool-input-form";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { createDocxHtml } from "@/lib/docx-export";
 import {
   buildPdfExportPages,
-  createPrintDocumentMarkup,
   pdfExportPageSize,
   PDF_EXPORT_SCALE,
   resolveLogoDataUrl,
+  waitForImages,
 } from "@/lib/pdf-export";
-import type { GenerateType } from "@/lib/prompt-templates";
+import type { SessionUser } from "@/lib/session";
+import {
+  buildToolPromptInput,
+  getToolDocumentTitle,
+  TOOL_FILE_MAX_SIZE,
+  type ToolDefinition,
+} from "@/lib/tools";
 
 const EXPORT_DOCX_STYLES = `
   body {
     margin: 0;
+    padding: 24px;
     background: #ffffff;
     color: #0f172a;
     font-family: Arial, sans-serif;
@@ -28,138 +38,171 @@ const EXPORT_DOCX_STYLES = `
   #pdf-content {
     font-family: Arial, sans-serif;
     line-height: 1.6;
-    padding: 20px;
     color: #0f172a;
   }
 
-  #pdf-content h1,
-  #pdf-content h2,
-  #pdf-content h3 {
-    margin-top: 16px;
-    margin-bottom: 8px;
+  h1, h2, h3 {
+    margin: 16px 0 8px;
+    color: #0f172a;
   }
 
-  #pdf-content p {
-    margin-bottom: 10px;
+  h1 {
+    font-size: 24px;
   }
 
-  #pdf-content ul,
-  #pdf-content ol {
+  h2 {
+    font-size: 20px;
+  }
+
+  h3 {
+    font-size: 17px;
+  }
+
+  p {
+    margin: 0 0 10px;
+  }
+
+  ul, ol {
+    margin: 0 0 10px;
     padding-left: 20px;
-    margin-bottom: 10px;
   }
 
-  #pdf-content table {
+  li {
+    margin-bottom: 6px;
+  }
+
+  table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
+    margin: 14px 0;
   }
 
-  #pdf-content th,
-  #pdf-content td {
-    border: 1px solid #ccc;
+  th, td {
+    border: 1px solid #cbd5e1;
     padding: 8px;
     text-align: left;
     vertical-align: top;
   }
 
-  #pdf-content .pdf-table-wrapper {
-    overflow: hidden;
+  thead {
+    background: #f8fafc;
   }
 `;
 
 interface ToolGeneratorProps {
-  title: string;
-  description: string;
-  type: GenerateType;
-  placeholder: string;
-}
-
-interface SessionUser {
-  email?: string;
-  name?: string;
+  tool: ToolDefinition;
+  sessionUser: SessionUser;
 }
 
 interface ProfilePayload {
   user?: {
     logoUrl?: string | null;
   };
+  error?: string;
 }
 
 function sanitizeFileName(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "document";
+  return (
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "document"
+  );
 }
 
 function getPrintableSource() {
   return document.getElementById("pdf-content");
 }
 
-async function getUserLogoUrl(userId: string) {
-  if (!userId) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as ProfilePayload;
-    return payload.user?.logoUrl ?? null;
-  } catch (error) {
-    console.error("getUserLogoUrl error", error);
-    return null;
-  }
+function wait(delay: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delay);
+  });
 }
 
-export function ToolGenerator({
-  title,
-  description,
-  type,
-  placeholder,
-}: ToolGeneratorProps) {
-  const [input, setInput] = useState("");
+function summarizeFiles(files: File[]) {
+  return files.map((file) => ({
+    name: file.name,
+    size: file.size,
+    type: file.type,
+  }));
+}
+
+export function ToolGenerator({ tool }: ToolGeneratorProps) {
+  const router = useRouter();
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(tool.fields.map((field) => [field.name, ""])),
+  );
+  const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
   const [output, setOutput] = useState("");
   const [usageWarning, setUsageWarning] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
 
-  const session = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem("saas-user");
-    if (!raw) return null;
+  const documentTitle = useMemo(() => {
+    return getToolDocumentTitle(tool, values) || tool.navLabel;
+  }, [tool, values]);
 
-    try {
-      return JSON.parse(raw) as SessionUser;
-    } catch {
-      return null;
+  useEffect(() => {
+    async function loadProfile() {
+      setProfileLoading(true);
+      try {
+        const response = await fetch("/api/profile", { cache: "no-store" });
+        const payload = (await response.json()) as ProfilePayload;
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Unable to load profile.");
+        }
+
+        setLogoUrl(payload.user?.logoUrl ?? "");
+      } catch (profileError) {
+        console.error("ToolGenerator profile load error", profileError);
+      } finally {
+        setProfileLoading(false);
+      }
     }
+
+    void loadProfile();
   }, []);
 
-  const userId = session?.email ?? "";
-  const documentTitle = input.trim() || title;
+  function onFieldChange(name: string, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function onFileChange(nextFiles: File[]) {
+    const oversizedFile = nextFiles.find((file) => file.size > TOOL_FILE_MAX_SIZE);
+    if (oversizedFile) {
+      setError(`${oversizedFile.name} is larger than 10MB.`);
+      toast.error(`${oversizedFile.name} is larger than 10MB.`);
+      return;
+    }
+
+    setFiles(nextFiles);
+  }
+
+  function validateForm() {
+    for (const field of tool.fields) {
+      if (field.required && !values[field.name]?.trim()) {
+        return `${field.label} is required.`;
+      }
+    }
+
+    return "";
+  }
 
   async function onGenerate() {
     setError("");
     setOutput("");
     setUsageWarning("");
 
-    if (!input.trim()) {
-      setError("Please enter some input before generating.");
-      return;
-    }
-
-    if (!userId) {
-      setError("Please login first to generate and save documents.");
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       return;
     }
 
@@ -169,9 +212,9 @@ export function ToolGenerator({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type,
-          input,
-          userId,
+          type: tool.type,
+          title: documentTitle,
+          input: buildToolPromptInput(tool, values, summarizeFiles(files)),
         }),
       });
 
@@ -183,8 +226,18 @@ export function ToolGenerator({
       };
 
       if (!res.ok) {
-        setError(payload.error ?? "Generation failed.");
-        toast.error(payload.error ?? "Generation failed.");
+        const message = payload.error ?? "Generation failed.";
+        setError(message);
+        toast.error(message);
+
+        if (res.status === 401) {
+          router.replace("/login");
+        }
+
+        if (res.status === 403) {
+          router.replace("/dashboard/tools");
+        }
+
         if (payload.usage?.plan === "free" && payload.usage.remaining === 0) {
           setUsageWarning("Daily free limit reached. Upgrade to paid plans soon.");
         }
@@ -193,12 +246,14 @@ export function ToolGenerator({
 
       setOutput(payload.output ?? payload.result ?? "");
       toast.success("Content generated");
+
       if (payload.usage?.plan === "free" && typeof payload.usage.remaining === "number") {
         setUsageWarning(
           `Free plan usage: ${payload.usage.remaining} of ${payload.usage.limit} generations remaining today.`,
         );
       }
-    } catch {
+    } catch (generateError) {
+      console.error("ToolGenerator onGenerate error", generateError);
       setError("Unable to reach generation service.");
       toast.error("Unable to reach generation service.");
     } finally {
@@ -206,31 +261,38 @@ export function ToolGenerator({
     }
   }
 
-  async function createExportPages() {
+  async function ensurePrintableContent() {
     const source = getPrintableSource();
     if (!source) {
       throw new Error("Printable content not found.");
     }
 
-    const logoUrl = await getUserLogoUrl(userId);
-    const logoDataUrl = await resolveLogoDataUrl(logoUrl);
+    await waitForImages(source);
+    await wait(400);
+    return source;
+  }
 
-    return buildPdfExportPages({
+  async function createExportPages() {
+    const source = await ensurePrintableContent();
+    const logoDataUrl = await resolveLogoDataUrl(logoUrl);
+    const exportPages = await buildPdfExportPages({
       source,
       logoDataUrl,
+      headerData: {
+        schoolName: values.schoolName,
+        subject: values.subject,
+        className: values.className,
+      },
     });
+
+    await waitForImages(exportPages.root);
+    await wait(400);
+    return exportPages;
   }
 
   async function downloadPDF() {
     if (!output.trim()) {
       setError("Generate content first to export.");
-      return;
-    }
-
-    const source = getPrintableSource();
-    if (!source) {
-      setError("Unable to export PDF. Printable content is missing.");
-      toast.error("Unable to export PDF. Printable content is missing.");
       return;
     }
 
@@ -240,17 +302,11 @@ export function ToolGenerator({
       const exportPages = await createExportPages();
       cleanup = exportPages.cleanup;
 
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
-
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
 
       for (const [index, page] of exportPages.pages.entries()) {
-        if (!page) {
-          throw new Error(`Missing export page at index ${index}.`);
-        }
-
         const canvas = await html2canvas(page, {
           scale: PDF_EXPORT_SCALE,
           useCORS: true,
@@ -294,111 +350,116 @@ export function ToolGenerator({
       return;
     }
 
-    const source = getPrintableSource();
-    if (!source) {
-      setError("Unable to find printable content.");
-      return;
-    }
+    try {
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${EXPORT_DOCX_STYLES}</style></head><body><div id="pdf-content">${createDocxHtml(output)}</div></body></html>`;
+      const docxBlob = await htmlDocx.asBlob(html);
+      const finalBlob =
+        docxBlob instanceof Blob
+          ? docxBlob
+          : new Blob([docxBlob as unknown as BlobPart], {
+              type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            });
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${EXPORT_DOCX_STYLES}</style></head><body>${source.outerHTML}</body></html>`;
-    const docxBlob = await htmlDocx.asBlob(html);
-    const finalBlob =
-      docxBlob instanceof Blob
-        ? docxBlob
-        : new Blob([docxBlob as unknown as BlobPart], {
-            type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          });
-    saveAs(finalBlob, `${sanitizeFileName(documentTitle)}.docx`);
-    toast.success("DOCX downloaded");
+      saveAs(finalBlob, `${sanitizeFileName(documentTitle)}.docx`);
+      toast.success("DOCX downloaded");
+    } catch (docxError) {
+      console.error("onDownloadDocx error", docxError);
+      setError("Unable to export DOCX. Please try again.");
+      toast.error("Unable to export DOCX. Please try again.");
+    }
   }
 
-  async function printPDF() {
+  async function handlePrint() {
     if (!output.trim()) {
       setError("Generate content first to print.");
       return;
     }
 
-    const source = getPrintableSource();
-    if (!source) {
-      setError("Unable to print. Printable content is missing.");
-      toast.error("Unable to print. Printable content is missing.");
-      return;
-    }
-
     let cleanup: (() => void) | null = null;
+    let finalized = false;
+
+    const finalizePrint = () => {
+      if (finalized) {
+        return;
+      }
+
+      finalized = true;
+      document.body.classList.remove("pdf-print-mode");
+      cleanup?.();
+    };
 
     try {
       const exportPages = await createExportPages();
       cleanup = exportPages.cleanup;
 
-      const printWindow = window.open("", "_blank", "noopener,noreferrer");
-      if (!printWindow) {
-        throw new Error("Print window was blocked by the browser.");
-      }
+      const onAfterPrint = () => {
+        window.removeEventListener("afterprint", onAfterPrint);
+        finalizePrint();
+      };
 
-      const markup = exportPages.pages.map((page) => page.outerHTML).join("");
-      printWindow.document.open();
-      printWindow.document.write(createPrintDocumentMarkup(markup));
-      printWindow.document.close();
-      printWindow.focus();
-
-      window.setTimeout(() => {
-        printWindow.print();
-      }, 250);
+      window.addEventListener("afterprint", onAfterPrint);
+      document.body.classList.add("pdf-print-mode");
+      await wait(150);
+      window.print();
+      window.setTimeout(finalizePrint, 1500);
     } catch (printError) {
-      console.error("printPDF error", printError);
+      console.error("handlePrint error", printError);
+      finalizePrint();
       setError("Unable to print PDF. Please try again.");
       toast.error("Unable to print PDF. Please try again.");
-    } finally {
-      cleanup?.();
     }
   }
 
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-5">
-      <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-      </header>
-
-      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <label className="mb-2 block text-sm font-medium text-slate-700">Input</label>
-        <textarea
-          rows={7}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={placeholder}
-          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring-2"
+    <section className="mx-auto w-full max-w-5xl space-y-5">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onGenerate();
+        }}
+      >
+        <ToolInputForm
+          tool={tool}
+          values={values}
+          onFieldChange={onFieldChange}
+          files={files}
+          onFileChange={onFileChange}
+          logoUrl={logoUrl}
+          generating={loading}
         />
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={loading}
-          className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? "Generating..." : "Generate"}
-        </button>
-        {loading ? (
-          <div className="mt-3">
-            <LoadingDots label="AI is drafting content" />
-          </div>
-        ) : null}
-      </article>
+      </form>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-2 text-lg font-semibold text-slate-900">Output</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Output</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Clean preview, export, and print layout for {tool.navLabel}.
+            </p>
+          </div>
+          {profileLoading ? (
+            <span className="text-xs text-slate-500">Loading header settings...</span>
+          ) : null}
+        </div>
+
         {error ? (
-          <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
           </p>
         ) : null}
+
         {usageWarning ? (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
             {usageWarning}
           </p>
         ) : null}
-        {output ? (
-          <div className="space-y-3">
+
+        {loading ? (
+          <div className="mt-4">
+            <LoadingDots label="AI is drafting content" />
+          </div>
+        ) : output ? (
+          <div className="mt-4 space-y-4">
             <MarkdownPreview content={output} contentId="pdf-content" />
             <div className="flex flex-wrap gap-2">
               <button
@@ -410,7 +471,7 @@ export function ToolGenerator({
               </button>
               <button
                 type="button"
-                onClick={printPDF}
+                onClick={handlePrint}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Print PDF
@@ -425,9 +486,12 @@ export function ToolGenerator({
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-600">Generated content will appear here.</p>
+          <p className="mt-4 text-sm text-slate-600">
+            Fill the form above to generate your document.
+          </p>
         )}
       </article>
     </section>
   );
 }
+

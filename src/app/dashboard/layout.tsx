@@ -1,9 +1,17 @@
+import { redirect } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { getServerSessionUser } from "@/lib/session";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const session = await getServerSessionUser();
+
+  if (!session) {
+    redirect("/login");
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50 md:flex">
       <DashboardSidebar />

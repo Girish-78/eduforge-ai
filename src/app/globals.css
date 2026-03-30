@@ -10,8 +10,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Segoe UI", "Aptos", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,7 +24,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: "Segoe UI", "Aptos", "Helvetica Neue", Arial, sans-serif;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
 }
@@ -56,6 +56,8 @@ h4 {
 }
 
 #pdf-content {
+  max-width: 794px;
+  margin: 0 auto;
   font-family: Arial, sans-serif;
   font-size: 15px;
   line-height: 1.6;
@@ -82,7 +84,10 @@ h4 {
 #pdf-content table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   margin-top: 10px;
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 #pdf-content th,
@@ -91,4 +96,14 @@ h4 {
   padding: 8px;
   text-align: left;
   vertical-align: top;
+  word-break: break-word;
+}
+
+#pdf-content .pdf-table-wrapper,
+#pdf-content table,
+#pdf-content tr,
+#pdf-content td,
+#pdf-content th {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }

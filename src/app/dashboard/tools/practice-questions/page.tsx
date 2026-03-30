@@ -1,12 +1,5 @@
-import { ToolGenerator } from "@/components/tools/tool-generator";
+import { ToolPageShell } from "@/components/tools/tool-page-shell";
 
 export default function PracticeQuestionsPage() {
-  return (
-    <ToolGenerator
-      title="Practice Questions Generator"
-      description="Generate mixed-difficulty practice sets with hints and self-check sections."
-      type="practice_questions"
-      placeholder="Enter topic and level. Example: Algebraic expressions practice for class 8."
-    />
-  );
+  return <ToolPageShell slug="practice-questions" />;
 }

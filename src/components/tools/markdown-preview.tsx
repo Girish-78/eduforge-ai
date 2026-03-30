@@ -10,11 +10,11 @@ interface MarkdownPreviewProps {
 
 export function MarkdownPreview({ content, contentId }: MarkdownPreviewProps) {
   return (
-    <div className="max-h-[34rem] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-5">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div
         id={contentId}
-        className="mx-auto w-full max-w-3xl space-y-4 text-[15px] text-slate-800"
-        style={{ fontFamily: "Arial, sans-serif", lineHeight: 1.6, padding: "20px" }}
+        className="mx-auto w-full max-w-[794px] space-y-4 rounded-xl bg-white px-5 py-6 text-[15px] text-slate-800 shadow-sm"
+        style={{ fontFamily: "Arial, sans-serif", lineHeight: 1.6 }}
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -35,18 +35,20 @@ export function MarkdownPreview({ content, contentId }: MarkdownPreviewProps) {
             ol: ({ children }) => <ol className="mb-2.5 list-decimal space-y-1 pl-5">{children}</ol>,
             li: ({ children }) => <li className="leading-7">{children}</li>,
             table: ({ children }) => (
-              <div className="pdf-table-wrapper mt-2.5 overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full border-collapse text-sm">{children}</table>
+              <div className="pdf-table-wrapper mt-2.5 overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full table-fixed border-collapse text-sm">{children}</table>
               </div>
             ),
             thead: ({ children }) => <thead className="bg-slate-100">{children}</thead>,
             th: ({ children }) => (
-              <th className="border border-slate-300 px-2 py-2 text-left font-semibold text-slate-900">
+              <th className="border border-slate-300 px-2 py-2 text-left font-semibold break-words text-slate-900">
                 {children}
               </th>
             ),
             td: ({ children }) => (
-              <td className="border border-slate-300 px-2 py-2 align-top">{children}</td>
+              <td className="border border-slate-300 px-2 py-2 align-top break-words">
+                {children}
+              </td>
             ),
             strong: ({ children }) => (
               <strong className="font-semibold text-slate-900">{children}</strong>

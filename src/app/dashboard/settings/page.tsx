@@ -1,14 +1,7 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
-
-interface SessionUser {
-  email?: string;
-  name?: string;
-  role?: string;
-  logoUrl?: string;
-}
 
 interface ProfilePayload {
   user?: {
@@ -18,22 +11,9 @@ interface ProfilePayload {
 }
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 export default function SettingsPage() {
-  const session = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem("saas-user");
-    if (!raw) return null;
-
-    try {
-      return JSON.parse(raw) as SessionUser;
-    } catch {
-      localStorage.removeItem("saas-user");
-      return null;
-    }
-  }, []);
-
-  const userId = session?.email ?? "";
   const [logoUrl, setLogoUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,18 +22,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function loadProfile() {
-      if (!userId) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       setError("");
 
       try {
-        const response = await fetch(`/api/profile?userId=${encodeURIComponent(userId)}`, {
-          cache: "no-store",
-        });
+        const response = await fetch("/api/profile", { cache: "no-store" });
         const payload = (await response.json()) as ProfilePayload;
 
         if (!response.ok) {
@@ -72,7 +45,7 @@ export default function SettingsPage() {
     }
 
     void loadProfile();
-  }, [userId]);
+  }, []);
 
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] ?? null;
@@ -89,15 +62,16 @@ export default function SettingsPage() {
       return;
     }
 
+    if (nextFile.size > MAX_FILE_SIZE) {
+      setSelectedFile(null);
+      setError("Logo file must be 5MB or smaller.");
+      return;
+    }
+
     setSelectedFile(nextFile);
   }
 
   async function onUploadLogo() {
-    if (!userId) {
-      setError("Please login first to update your logo.");
-      return;
-    }
-
     if (!selectedFile) {
       setError("Choose a JPG or PNG file before uploading.");
       return;
@@ -108,7 +82,6 @@ export default function SettingsPage() {
 
     try {
       const formData = new FormData();
-      formData.append("userId", userId);
       formData.append("logo", selectedFile);
 
       const response = await fetch("/api/profile", {
@@ -127,21 +100,6 @@ export default function SettingsPage() {
 
       setLogoUrl(payload.logoUrl);
       setSelectedFile(null);
-
-      if (typeof window !== "undefined") {
-        const raw = localStorage.getItem("saas-user");
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw) as SessionUser;
-            localStorage.setItem(
-              "saas-user",
-              JSON.stringify({ ...parsed, logoUrl: payload.logoUrl }),
-            );
-          } catch {
-            localStorage.removeItem("saas-user");
-          }
-        }
-      }
 
       toast.success("Logo uploaded");
     } catch (uploadError) {
@@ -178,10 +136,6 @@ export default function SettingsPage() {
 
         {loading ? (
           <p className="mt-4 text-sm text-slate-600">Loading profile...</p>
-        ) : !userId ? (
-          <p className="mt-4 text-sm text-slate-600">
-            Login to manage your PDF logo.
-          </p>
         ) : (
           <div className="mt-4 space-y-4">
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">

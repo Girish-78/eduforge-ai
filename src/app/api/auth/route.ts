@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAuth, getDb } from "@/lib/firebase-admin";
 import { isUserRole, type UserRole } from "@/lib/roles";
+import {
+  attachSessionCookie,
+  clearSessionCookie,
+  type SessionUser,
+} from "@/lib/session";
 
 interface AuthBody {
   mode?: "login" | "signup";
@@ -79,10 +84,20 @@ export async function POST(request: Request) {
         createdAt: Timestamp.now(),
       });
 
-      return NextResponse.json({
+      const user: SessionUser = {
+        email: docId,
+        name: displayName,
+        role,
+        plan: "free",
+      };
+
+      return attachSessionCookie(
+        NextResponse.json({
         message: `Account created for ${email}`,
-        user: { email: docId, name: displayName, role, plan: "free" },
-      });
+        user,
+        }),
+        user,
+      );
     }
 
     try {
@@ -127,15 +142,20 @@ export async function POST(request: Request) {
 
     const displayName = user.name?.trim() || docId.split("@")[0];
 
-    return NextResponse.json({
+    const sessionUser: SessionUser = {
+      email: docId,
+      name: displayName,
+      role: user.role,
+      plan: user.plan ?? "free",
+    };
+
+    return attachSessionCookie(
+      NextResponse.json({
       message: `Logged in as ${email}`,
-      user: {
-        email: docId,
-        name: displayName,
-        role: user.role,
-        plan: user.plan ?? "free",
-      },
-    });
+      user: sessionUser,
+      }),
+      sessionUser,
+    );
   } catch (error) {
     console.error("Auth route error", error);
     const message =
@@ -159,4 +179,12 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export function DELETE() {
+  return clearSessionCookie(
+    NextResponse.json({
+      success: true,
+    }),
+  );
 }

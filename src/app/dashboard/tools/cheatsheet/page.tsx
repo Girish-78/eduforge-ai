@@ -1,12 +1,5 @@
-import { ToolGenerator } from "@/components/tools/tool-generator";
+import { ToolPageShell } from "@/components/tools/tool-page-shell";
 
 export default function CheatsheetPage() {
-  return (
-    <ToolGenerator
-      title="Cheatsheet Generator"
-      description="Create quick-reference concept sheets for revision and retention."
-      type="cheatsheet"
-      placeholder="Enter topic and grade. Example: Trigonometry identities for class 10."
-    />
-  );
+  return <ToolPageShell slug="cheatsheet" />;
 }

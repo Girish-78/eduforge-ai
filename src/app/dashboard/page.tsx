@@ -1,49 +1,13 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo } from "react";
-import { roleLabels, roleTools, type UserRole } from "@/lib/roles";
+import { roleLabels } from "@/lib/roles";
+import { getServerSessionUser } from "@/lib/session";
+import { getToolRoute, getToolsForRole } from "@/lib/tools";
 
-const toolDescriptions: Record<string, string> = {
-  "Lesson Plan": "Build structured daily/weekly class plans in seconds.",
-  Worksheet: "Create classroom worksheets with questions and activities.",
-  Notes: "Summarize concepts into clear revision notes.",
-  "Question Paper": "Generate exam-ready papers with balanced difficulty levels.",
-  Cheatsheet: "Create quick, high-retention revision sheets.",
-  "Practice Questions": "Prepare targeted practice sets with answer guidance.",
-};
-
-const toolRouteByName: Record<string, string> = {
-  "Lesson Plan": "/dashboard/tools/lesson-plan",
-  Worksheet: "/dashboard/tools/worksheet",
-  Notes: "/dashboard/tools/notes",
-  "Question Paper": "/dashboard/tools/question-paper",
-  Cheatsheet: "/dashboard/tools/cheatsheet",
-  "Practice Questions": "/dashboard/tools/practice-questions",
-};
-
-export default function DashboardPage() {
-  const session = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const raw = localStorage.getItem("saas-user");
-    if (!raw) return null;
-
-    try {
-      return JSON.parse(raw) as { email?: string; role?: UserRole };
-    } catch {
-      localStorage.removeItem("saas-user");
-      return null;
-    }
-  }, []);
-
+export default async function DashboardPage() {
+  const session = await getServerSessionUser();
   const userRole = session?.role ?? null;
   const userEmail = session?.email ?? "";
-
-  const roleBasedTools = useMemo(() => {
-    if (!userRole) return [];
-    return roleTools[userRole];
-  }, [userRole]);
-  const tools = roleBasedTools;
+  const tools = userRole ? getToolsForRole(userRole) : [];
 
   return (
     <section className="space-y-6">
@@ -59,15 +23,13 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {tools.map((tool) => (
           <article
-            key={tool}
+            key={tool.slug}
             className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
           >
-            <h3 className="text-base font-semibold text-slate-900">{tool}</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              {toolDescriptions[tool] ?? "AI helper for this workflow."}
-            </p>
+            <h3 className="text-base font-semibold text-slate-900">{tool.navLabel}</h3>
+            <p className="mt-2 text-sm text-slate-600">{tool.summary}</p>
             <Link
-              href={toolRouteByName[tool] ?? "/dashboard"}
+              href={getToolRoute(tool)}
               className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
             >
               Open Tool
