@@ -1,6 +1,8 @@
 "use client";
 
 import { saveAs } from "file-saver";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import htmlDocx from "html-docx-js-typescript";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -11,6 +13,10 @@ import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { ToolInputForm } from "@/components/tools/tool-input-form";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { createDocxHtml } from "@/lib/docx-export";
+import {
+  getFirebaseClientApp,
+  getFirebaseClientFirestore,
+} from "@/lib/firebase-client";
 import {
   buildPdfExportPages,
   pdfExportPageSize,
@@ -94,13 +100,6 @@ interface ToolGeneratorProps {
   sessionUser: SessionUser;
 }
 
-interface ProfilePayload {
-  user?: {
-    logoUrl?: string | null;
-  };
-  error?: string;
-}
-
 function sanitizeFileName(value: string) {
   return (
     value
@@ -176,25 +175,29 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }, [tool, values]);
 
   useEffect(() => {
-    async function loadProfile() {
+    const auth = getAuth(getFirebaseClientApp());
+    const db = getFirebaseClientFirestore();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setProfileLoading(true);
+
+      if (!user) {
+        setLogoUrl("");
+        setProfileLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("/api/profile", { cache: "no-store" });
-        const payload = (await response.json()) as ProfilePayload;
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to load profile.");
-        }
-
-        setLogoUrl(payload.user?.logoUrl ?? "");
+        const snapshot = await getDoc(doc(db, "users", user.uid));
+        setLogoUrl((snapshot.data()?.logoUrl as string | undefined) ?? "");
       } catch (profileError) {
         console.error("ToolGenerator profile load error", profileError);
       } finally {
         setProfileLoading(false);
       }
-    }
+    });
 
-    void loadProfile();
+    return unsubscribe;
   }, []);
 
   function onFieldChange(name: string, value: string) {

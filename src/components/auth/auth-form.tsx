@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import { getFirebaseClientAuth } from "@/lib/firebase-client";
 import { roleLabels, type UserRole } from "@/lib/roles";
 
 type AuthMode = "login" | "signup";
@@ -44,23 +46,52 @@ export function AuthForm({ mode }: AuthFormProps) {
       const result = (await res.json()) as {
         message?: string;
         error?: string;
-        user?: { email: string; name?: string; role: UserRole; plan?: "free" | "pro" };
+        user?: {
+          email: string;
+          name?: string;
+          role: UserRole;
+          plan?: "free" | "pro";
+        };
       };
       if (!res.ok) {
         setMessage(result.error ?? "Something went wrong");
         toast.error(result.error ?? "Something went wrong");
       } else {
+        const auth = getFirebaseClientAuth();
+        let authUserUid = "";
+
+        try {
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          authUserUid = credential.user.uid;
+          console.log("Authenticated Firebase user:", authUserUid);
+        } catch (authError) {
+          console.error("Firebase client sign-in error", authError);
+          await fetch("/api/auth", { method: "DELETE" });
+          throw authError;
+        }
+
         setMessage(result.message ?? "Success");
         toast.success(result.message ?? "Signed in successfully");
         if (result.user) {
-          localStorage.setItem("saas-user", JSON.stringify(result.user));
+          localStorage.setItem(
+            "saas-user",
+            JSON.stringify({ ...result.user, uid: authUserUid }),
+          );
           router.push("/dashboard");
           router.refresh();
         }
       }
-    } catch {
-      setMessage("Unable to reach server");
-      toast.error("Unable to reach server");
+    } catch (error) {
+      try {
+        await signOut(getFirebaseClientAuth());
+      } catch (signOutError) {
+        console.error("Firebase sign-out cleanup error", signOutError);
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Unable to reach server";
+      setMessage(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
