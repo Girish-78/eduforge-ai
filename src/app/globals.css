@@ -196,3 +196,27 @@ h4 {
   overflow: visible !important;
   max-height: none !important;
 }
+
+@media print {
+  body.pdf-print-mode * {
+    visibility: hidden;
+  }
+
+  body.pdf-print-mode #pdf-content,
+  body.pdf-print-mode #pdf-content * {
+    visibility: visible;
+  }
+
+  body.pdf-print-mode #pdf-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    box-shadow: none;
+    border-radius: 0;
+  }
+}

@@ -23,6 +23,12 @@ export const pdfExportConfig = {
   },
 };
 
+interface WaitForImagesOptions {
+  context?: string;
+  throwOnError?: boolean;
+  timeoutMs?: number;
+}
+
 const PDF_EXPORT_STYLES = `
   .pdf-export-root {
     position: fixed;
@@ -335,31 +341,79 @@ export async function resolveLogoDataUrl(logoUrl?: string | null) {
       reader.readAsDataURL(blob);
     });
   } catch (error) {
-    console.error("resolveLogoDataUrl error", error);
+    console.error("Export failed:", error);
     return null;
   }
 }
 
-export async function waitForImages(container: ParentNode) {
+function describeImage(image: HTMLImageElement) {
+  return image.alt?.trim() || image.currentSrc || image.src || "an image";
+}
+
+export async function waitForImages(
+  container: ParentNode,
+  options: WaitForImagesOptions = {},
+) {
+  const {
+    context = "export content",
+    throwOnError = false,
+    timeoutMs = 10000,
+  } = options;
   const images = Array.from(container.querySelectorAll("img"));
 
   await Promise.all(
     images.map(
       (image) =>
-        new Promise<void>((resolve) => {
-          if (image.complete && image.naturalWidth > 0) {
-            resolve();
-            return;
-          }
+        new Promise<void>((resolve, reject) => {
+          const fail = (message: string) => {
+            const error = new Error(message);
+            if (throwOnError) {
+              reject(error);
+              return;
+            }
 
-          const finalize = () => {
-            image.removeEventListener("load", finalize);
-            image.removeEventListener("error", finalize);
+            console.error("Export failed:", error);
             resolve();
           };
 
-          image.addEventListener("load", finalize, { once: true });
-          image.addEventListener("error", finalize, { once: true });
+          if (image.complete) {
+            if (image.naturalWidth > 0) {
+              resolve();
+              return;
+            }
+
+            fail(`Image not loaded in ${context}: ${describeImage(image)}`);
+            return;
+          }
+
+          const cleanup = () => {
+            window.clearTimeout(timeoutId);
+            image.removeEventListener("load", handleLoad);
+            image.removeEventListener("error", handleError);
+          };
+
+          const handleLoad = () => {
+            cleanup();
+            if (image.naturalWidth > 0) {
+              resolve();
+              return;
+            }
+
+            fail(`Image not loaded in ${context}: ${describeImage(image)}`);
+          };
+
+          const handleError = () => {
+            cleanup();
+            fail(`Image not loaded in ${context}: ${describeImage(image)}`);
+          };
+
+          const timeoutId = window.setTimeout(() => {
+            cleanup();
+            fail(`Image load timed out in ${context}: ${describeImage(image)}`);
+          }, timeoutMs);
+
+          image.addEventListener("load", handleLoad, { once: true });
+          image.addEventListener("error", handleError, { once: true });
         }),
     ),
   );
@@ -382,7 +436,10 @@ export async function buildPdfExportDocument({
   documentElement.appendChild(clone);
   root.appendChild(documentElement);
 
-  await waitForImages(documentElement);
+  await waitForImages(documentElement, {
+    context: "the export document",
+    throwOnError: true,
+  });
   await new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => {
       window.setTimeout(resolve, 120);

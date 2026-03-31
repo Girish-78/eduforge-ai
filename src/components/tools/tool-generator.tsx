@@ -3,8 +3,6 @@
 import { saveAs } from "file-saver";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import htmlDocx from "html-docx-js-typescript";
-import jsPDF from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,7 +10,11 @@ import { PDFHeader } from "@/components/tools/pdf-header";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { ToolInputForm } from "@/components/tools/tool-input-form";
 import { LoadingDots } from "@/components/ui/loading-dots";
-import { createDocxHtml } from "@/lib/docx-export";
+import {
+  disabledButtonStateClassName,
+  secondaryButtonClassName,
+} from "@/lib/button-styles";
+import { createDocxBlob } from "@/lib/docx-export";
 import {
   getFirebaseClientApp,
   getFirebaseClientFirestore,
@@ -32,73 +34,12 @@ import {
   type ToolDefinition,
 } from "@/lib/tools";
 
-const EXPORT_DOCX_STYLES = `
-  body {
-    margin: 0;
-    padding: 24px;
-    background: #ffffff;
-    color: #0f172a;
-    font-family: Arial, sans-serif;
-  }
-
-  #pdf-content {
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
-    color: #0f172a;
-  }
-
-  h1, h2, h3 {
-    margin: 16px 0 8px;
-    color: #0f172a;
-  }
-
-  h1 {
-    font-size: 24px;
-  }
-
-  h2 {
-    font-size: 20px;
-  }
-
-  h3 {
-    font-size: 17px;
-  }
-
-  p {
-    margin: 0 0 10px;
-  }
-
-  ul, ol {
-    margin: 0 0 10px;
-    padding-left: 20px;
-  }
-
-  li {
-    margin-bottom: 6px;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 14px 0;
-  }
-
-  th, td {
-    border: 1px solid #cbd5e1;
-    padding: 8px;
-    text-align: left;
-    vertical-align: top;
-  }
-
-  thead {
-    background: #f8fafc;
-  }
-`;
-
 interface ToolGeneratorProps {
   tool: ToolDefinition;
   sessionUser: SessionUser;
 }
+
+type ExportAction = "pdf" | "print" | "docx" | null;
 
 function sanitizeFileName(value: string) {
   return (
@@ -124,6 +65,14 @@ function wait(delay: number) {
   return new Promise<void>((resolve) => {
     window.setTimeout(resolve, delay);
   });
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 function summarizeFiles(files: File[]) {
@@ -169,10 +118,13 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   const [output, setOutput] = useState("");
   const [usageWarning, setUsageWarning] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [activeExportAction, setActiveExportAction] = useState<ExportAction>(null);
 
   const documentTitle = useMemo(() => {
     return getToolDocumentTitle(tool, values) || tool.navLabel;
   }, [tool, values]);
+
+  const exportButtonsDisabled = loading || activeExportAction !== null;
 
   useEffect(() => {
     const auth = getAuth(getFirebaseClientApp());
@@ -297,7 +249,10 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     const restoreSource = preparePdfContentForExport(source);
 
     try {
-      await waitForImages(source);
+      await waitForImages(source, {
+        context: "the preview content",
+        throwOnError: true,
+      });
       await wait(500);
       return {
         source,
@@ -314,12 +269,19 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
     try {
       const logoDataUrl = await resolveLogoDataUrl(logoUrl);
+      if (logoUrl && !logoDataUrl) {
+        throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
+      }
+
       const exportDocument = await buildPdfExportDocument({
         source,
         logoDataUrl,
       });
 
-      await waitForImages(exportDocument.root);
+      await waitForImages(exportDocument.root, {
+        context: "the export document",
+        throwOnError: true,
+      });
       await wait(500);
 
       return {
@@ -335,7 +297,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     }
   }
 
-  async function downloadPDF() {
+  async function handleDownloadPDF() {
     if (!output.trim()) {
       setError("Generate content first to export.");
       return;
@@ -344,80 +306,75 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     let cleanup: (() => void) | null = null;
 
     try {
+      setError("");
+      setActiveExportAction("pdf");
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default;
+      if (typeof html2pdf !== "function") {
+        throw new Error("PDF export library failed to load.");
+      }
+
       const exportDocument = await createExportPages();
       cleanup = exportDocument.cleanup;
 
-      const pdf = new jsPDF(pdfExportConfig.jsPDF);
+      await html2pdf()
+        .set({
+          ...pdfExportConfig,
+          filename: `${sanitizeFileName(documentTitle)}.pdf`,
+          pagebreak: {
+            mode: ["avoid-all", "css", "legacy"],
+          },
+          html2canvas: {
+            ...pdfExportConfig.html2canvas,
+            backgroundColor: "#ffffff",
+            logging: false,
+            windowWidth: pdfExportPageSize.width,
+          },
+        })
+        .from(exportDocument.documentElement)
+        .save();
 
-      await pdf.html(exportDocument.documentElement, {
-        margin: pdfExportConfig.margin,
-        autoPaging: "text",
-        width: pdfExportPageSize.innerWidthMm,
-        windowWidth: pdfExportPageSize.width,
-        image: pdfExportConfig.image,
-        html2canvas: {
-          ...pdfExportConfig.html2canvas,
-          backgroundColor: "#ffffff",
-          logging: false,
-          windowWidth: pdfExportPageSize.width,
-        },
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const totalPages = pdf.getNumberOfPages();
-
-      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-        pdf.setPage(pageNumber);
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(8.5);
-        pdf.setTextColor(71, 85, 105);
-        pdf.text("Eduforge-AI", pdfExportConfig.margin, pageHeight - 4);
-        pdf.text(
-          `Page ${pageNumber}`,
-          pageWidth - pdfExportConfig.margin,
-          pageHeight - 4,
-          { align: "right" },
-        );
-      }
-
-      pdf.save(`${sanitizeFileName(documentTitle)}.pdf`);
       toast.success("PDF downloaded");
     } catch (downloadError) {
-      console.error("downloadPDF error", {
-        message:
-          downloadError instanceof Error ? downloadError.message : "Unknown PDF export error",
-        error: downloadError,
-      });
-      setError("Unable to export PDF. Please try again.");
-      toast.error("Unable to export PDF. Please try again.");
+      const message = getErrorMessage(downloadError, "Unable to export PDF. Please try again.");
+      console.error("Export failed:", downloadError);
+      setError(message);
+      toast.error(message);
     } finally {
       cleanup?.();
+      setActiveExportAction(null);
     }
   }
 
-  async function onDownloadDocx() {
+  async function handleDownloadDocx() {
     if (!output.trim()) {
       setError("Generate content first to export.");
       return;
     }
 
     try {
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>${EXPORT_DOCX_STYLES}</style></head><body><div id="pdf-content">${createDocxHtml(output)}</div></body></html>`;
-      const docxBlob = await htmlDocx.asBlob(html);
-      const finalBlob =
-        docxBlob instanceof Blob
-          ? docxBlob
-          : new Blob([docxBlob as unknown as BlobPart], {
-              type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            });
+      setError("");
+      setActiveExportAction("docx");
+      const docxBlob = await createDocxBlob({
+        title: documentTitle,
+        content: output,
+        toolType: tool.type,
+        schoolName: values.schoolName,
+        className: values.className,
+        subject: values.subject,
+        chapter: values.chapter,
+        periods: values.periods,
+      });
 
-      saveAs(finalBlob, `${sanitizeFileName(documentTitle)}.docx`);
+      saveAs(docxBlob, `${sanitizeFileName(documentTitle)}.docx`);
       toast.success("DOCX downloaded");
     } catch (docxError) {
-      console.error("onDownloadDocx error", docxError);
-      setError("Unable to export DOCX. Please try again.");
-      toast.error("Unable to export DOCX. Please try again.");
+      const message = getErrorMessage(docxError, "Unable to export DOCX. Please try again.");
+      console.error("Export failed:", docxError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setActiveExportAction(null);
     }
   }
 
@@ -427,7 +384,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       return;
     }
 
-    let cleanup: (() => void) | null = null;
+    let restoreSource: (() => void) | null = null;
     let finalized = false;
 
     const finalizePrint = () => {
@@ -437,12 +394,15 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
       finalized = true;
       document.body.classList.remove("pdf-print-mode");
-      cleanup?.();
+      restoreSource?.();
+      setActiveExportAction(null);
     };
 
     try {
-      const exportDocument = await createExportPages();
-      cleanup = exportDocument.cleanup;
+      setError("");
+      setActiveExportAction("print");
+      const printableContent = await ensurePrintableContent();
+      restoreSource = printableContent.restoreSource;
 
       const onAfterPrint = () => {
         window.removeEventListener("afterprint", onAfterPrint);
@@ -455,11 +415,16 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       window.print();
       window.setTimeout(finalizePrint, 1500);
     } catch (printError) {
-      console.error("handlePrint error", printError);
+      const message = getErrorMessage(printError, "Unable to print PDF. Please try again.");
+      console.error("Export failed:", printError);
       finalizePrint();
-      setError("Unable to print PDF. Please try again.");
-      toast.error("Unable to print PDF. Please try again.");
+      setError(message);
+      toast.error(message);
     }
+  }
+
+  function getActionLabel(action: Exclude<ExportAction, null>, idleLabel: string) {
+    return activeExportAction === action ? "Generating..." : idleLabel;
   }
 
   return (
@@ -530,24 +495,30 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={downloadPDF}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={handleDownloadPDF}
+                disabled={exportButtonsDisabled}
+                aria-busy={activeExportAction === "pdf"}
+                className={`${secondaryButtonClassName} ${disabledButtonStateClassName}`}
               >
-                Download PDF
+                {getActionLabel("pdf", "Download PDF")}
               </button>
               <button
                 type="button"
                 onClick={handlePrint}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                disabled={exportButtonsDisabled}
+                aria-busy={activeExportAction === "print"}
+                className={`${secondaryButtonClassName} ${disabledButtonStateClassName}`}
               >
-                Print PDF
+                {getActionLabel("print", "Print PDF")}
               </button>
               <button
                 type="button"
-                onClick={onDownloadDocx}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={handleDownloadDocx}
+                disabled={exportButtonsDisabled}
+                aria-busy={activeExportAction === "docx"}
+                className={`${secondaryButtonClassName} ${disabledButtonStateClassName}`}
               >
-                Download DOCX
+                {getActionLabel("docx", "Download DOCX")}
               </button>
             </div>
           </div>
