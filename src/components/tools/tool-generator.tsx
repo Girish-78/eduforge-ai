@@ -4,11 +4,11 @@ import { saveAs } from "file-saver";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import htmlDocx from "html-docx-js-typescript";
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PDFHeader } from "@/components/tools/pdf-header";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { ToolInputForm } from "@/components/tools/tool-input-form";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -18,9 +18,9 @@ import {
   getFirebaseClientFirestore,
 } from "@/lib/firebase-client";
 import {
-  buildPdfExportPages,
+  buildPdfExportDocument,
+  pdfExportConfig,
   pdfExportPageSize,
-  PDF_EXPORT_SCALE,
   resolveLogoDataUrl,
   waitForImages,
 } from "@/lib/pdf-export";
@@ -314,23 +314,18 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
     try {
       const logoDataUrl = await resolveLogoDataUrl(logoUrl);
-      const exportPages = await buildPdfExportPages({
+      const exportDocument = await buildPdfExportDocument({
         source,
         logoDataUrl,
-        headerData: {
-          schoolName: values.schoolName,
-          subject: values.subject,
-          className: values.className,
-        },
       });
 
-      await waitForImages(exportPages.root);
+      await waitForImages(exportDocument.root);
       await wait(500);
 
       return {
-        ...exportPages,
+        ...exportDocument,
         cleanup() {
-          exportPages.cleanup();
+          exportDocument.cleanup();
           restoreSource();
         },
       };
@@ -349,38 +344,40 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     let cleanup: (() => void) | null = null;
 
     try {
-      const exportPages = await createExportPages();
-      cleanup = exportPages.cleanup;
+      const exportDocument = await createExportPages();
+      cleanup = exportDocument.cleanup;
 
-      const pdf = new jsPDF("p", "mm", "a4");
+      const pdf = new jsPDF(pdfExportConfig.jsPDF);
+
+      await pdf.html(exportDocument.documentElement, {
+        margin: pdfExportConfig.margin,
+        autoPaging: "text",
+        width: pdfExportPageSize.innerWidthMm,
+        windowWidth: pdfExportPageSize.width,
+        image: pdfExportConfig.image,
+        html2canvas: {
+          ...pdfExportConfig.html2canvas,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: pdfExportPageSize.width,
+        },
+      });
+
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
+      const totalPages = pdf.getNumberOfPages();
 
-      for (const [index, page] of exportPages.pages.entries()) {
-        const canvas = await html2canvas(page, {
-          scale: PDF_EXPORT_SCALE,
-          useCORS: true,
-          allowTaint: false,
-          backgroundColor: "#ffffff",
-          width: pdfExportPageSize.width,
-          height: pdfExportPageSize.height,
-          windowWidth: pdfExportPageSize.width,
-          windowHeight: pdfExportPageSize.height,
-        });
-
-        if (index > 0) {
-          pdf.addPage();
-        }
-
-        pdf.addImage(
-          canvas.toDataURL("image/png"),
-          "PNG",
-          0,
-          0,
-          pageWidth,
-          pageHeight,
-          undefined,
-          "FAST",
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+        pdf.setPage(pageNumber);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(71, 85, 105);
+        pdf.text("Eduforge-AI", pdfExportConfig.margin, pageHeight - 4);
+        pdf.text(
+          `Page ${pageNumber}`,
+          pageWidth - pdfExportConfig.margin,
+          pageHeight - 4,
+          { align: "right" },
         );
       }
 
@@ -444,8 +441,8 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     };
 
     try {
-      const exportPages = await createExportPages();
-      cleanup = exportPages.cleanup;
+      const exportDocument = await createExportPages();
+      cleanup = exportDocument.cleanup;
 
       const onAfterPrint = () => {
         window.removeEventListener("afterprint", onAfterPrint);
@@ -515,7 +512,21 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
           </div>
         ) : output ? (
           <div className="mt-4 space-y-4">
-            <MarkdownPreview content={output} contentId="pdf-content" />
+            <MarkdownPreview
+              content={output}
+              contentId="pdf-content"
+              header={
+                <PDFHeader
+                  toolType={tool.type}
+                  schoolName={values.schoolName}
+                  className={values.className}
+                  subject={values.subject}
+                  chapter={values.chapter}
+                  periods={values.periods}
+                  logoUrl={logoUrl}
+                />
+              }
+            />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"

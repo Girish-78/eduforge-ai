@@ -2,6 +2,10 @@
 
 import type { ChangeEvent } from "react";
 import {
+  disabledButtonStateClassName,
+  primaryButtonClassName,
+} from "@/lib/button-styles";
+import {
   TOOL_FILE_ACCEPT,
   TOOL_FILE_MAX_SIZE,
   type ToolDefinition,
@@ -111,34 +115,49 @@ export function ToolInputForm({
             File Upload
           </label>
           <input
+            id={`tool-file-upload-${tool.slug}`}
             type="file"
             accept={TOOL_FILE_ACCEPT}
             multiple
             onChange={handleFiles}
-            className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-700"
+            className="hidden"
           />
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 flex-1 space-y-3">
+              <label
+                htmlFor={`tool-file-upload-${tool.slug}`}
+                className={`${primaryButtonClassName} w-fit cursor-pointer`}
+              >
+                Choose Files
+              </label>
+              <div className="flex min-h-16 flex-wrap items-start gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                {files.length > 0 ? (
+                  files.map((file) => (
+                    <span
+                      key={`${file.name}-${file.size}`}
+                      className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
+                    >
+                      {file.name}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No reference files selected yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
           <p className="mt-1 text-xs text-slate-500">
             Accepted: PDF, DOCX, JPG, PNG. Up to 3 files, 10MB each.
           </p>
-          {files.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {files.map((file) => (
-                <span
-                  key={`${file.name}-${file.size}`}
-                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
-                >
-                  {file.name}
-                </span>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
 
       <button
         type="submit"
         disabled={generating}
-        className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className={`${primaryButtonClassName} ${disabledButtonStateClassName} mt-6 min-w-[140px]`}
       >
         {generating ? "Generating..." : "Generate"}
       </button>

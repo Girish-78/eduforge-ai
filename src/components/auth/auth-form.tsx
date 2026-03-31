@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
+import {
+  disabledButtonStateClassName,
+  primaryButtonClassName,
+} from "@/lib/button-styles";
 import { getFirebaseClientAuth } from "@/lib/firebase-client";
 import { roleLabels, type UserRole } from "@/lib/roles";
 
@@ -172,7 +176,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className={`${primaryButtonClassName} ${disabledButtonStateClassName} w-full`}
         >
           {loading ? "Please wait..." : isLogin ? "Log In" : "Create Account"}
         </button>

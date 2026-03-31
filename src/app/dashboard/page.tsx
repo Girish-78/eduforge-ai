@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  primaryButtonClassName,
+  secondaryButtonClassName,
+} from "@/lib/button-styles";
 import { roleLabels } from "@/lib/roles";
 import { getServerSessionUser } from "@/lib/session";
 import { getToolRoute, getToolsForRole } from "@/lib/tools";
@@ -30,7 +34,7 @@ export default async function DashboardPage() {
             <p className="mt-2 text-sm text-slate-600">{tool.summary}</p>
             <Link
               href={getToolRoute(tool)}
-              className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              className={`${primaryButtonClassName} mt-4`}
             >
               Open Tool
             </Link>
@@ -45,7 +49,7 @@ export default async function DashboardPage() {
         </p>
         <Link
           href="/dashboard/documents"
-          className="mt-3 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          className={`${secondaryButtonClassName} mt-3`}
         >
           Open My Documents
         </Link>
