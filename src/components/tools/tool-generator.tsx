@@ -15,6 +15,11 @@ import {
   secondaryButtonClassName,
 } from "@/lib/button-styles";
 import { createDocxBlob } from "@/lib/docx-export";
+import { prepareExportMarkdown } from "@/lib/export-content";
+import {
+  prepareLogoAsset,
+  resolveFirebaseStorageDownloadUrl,
+} from "@/lib/export-logo";
 import {
   getFirebaseClientApp,
   getFirebaseClientFirestore,
@@ -23,7 +28,7 @@ import {
   buildPdfExportDocument,
   pdfExportConfig,
   pdfExportPageSize,
-  resolveLogoDataUrl,
+  waitForDocumentFonts,
   waitForImages,
 } from "@/lib/pdf-export";
 import type { SessionUser } from "@/lib/session";
@@ -117,12 +122,33 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   const [error, setError] = useState("");
   const [output, setOutput] = useState("");
   const [usageWarning, setUsageWarning] = useState("");
+  const [logoSource, setLogoSource] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [activeExportAction, setActiveExportAction] = useState<ExportAction>(null);
 
   const documentTitle = useMemo(() => {
     return getToolDocumentTitle(tool, values) || tool.navLabel;
   }, [tool, values]);
+  const preparedExport = useMemo(() => {
+    return prepareExportMarkdown(output, {
+      title: documentTitle,
+      toolType: tool.type,
+      schoolName: values.schoolName,
+      className: values.className,
+      subject: values.subject,
+      chapter: values.chapter,
+      periods: values.periods,
+    });
+  }, [
+    documentTitle,
+    output,
+    tool.type,
+    values.chapter,
+    values.className,
+    values.periods,
+    values.schoolName,
+    values.subject,
+  ]);
 
   const exportButtonsDisabled = loading || activeExportAction !== null;
 
@@ -134,6 +160,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       setProfileLoading(true);
 
       if (!user) {
+        setLogoSource("");
         setLogoUrl("");
         setProfileLoading(false);
         return;
@@ -141,7 +168,23 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
       try {
         const snapshot = await getDoc(doc(db, "users", user.uid));
-        setLogoUrl((snapshot.data()?.logoUrl as string | undefined) ?? "");
+        const data = snapshot.data() ?? {};
+        const nextLogoSource =
+          (typeof data.logoPath === "string" && data.logoPath.trim()) ||
+          ((data.logoUrl as string | undefined) ?? "");
+
+        setLogoSource(nextLogoSource);
+        if (nextLogoSource) {
+          try {
+            const resolvedLogoUrl = await resolveFirebaseStorageDownloadUrl(nextLogoSource);
+            setLogoUrl(resolvedLogoUrl ?? "");
+          } catch (logoResolveError) {
+            console.error("ToolGenerator logo resolve error", logoResolveError);
+            setLogoUrl(typeof data.logoUrl === "string" ? data.logoUrl : "");
+          }
+        } else {
+          setLogoUrl("");
+        }
       } catch (profileError) {
         console.error("ToolGenerator profile load error", profileError);
       } finally {
@@ -172,6 +215,20 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       if (field.required && !values[field.name]?.trim()) {
         return `${field.label} is required.`;
       }
+    }
+
+    return "";
+  }
+
+  function validatePreparedExport() {
+    if (!preparedExport.content.trim()) {
+      return "Generate content first to export.";
+    }
+
+    if (preparedExport.invalidMathCount > 0) {
+      return preparedExport.invalidMathCount === 1
+        ? "1 equation could not be rendered. Please fix the math before exporting."
+        : `${preparedExport.invalidMathCount} equations could not be rendered. Please fix the math before exporting.`;
     }
 
     return "";
@@ -249,6 +306,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     const restoreSource = preparePdfContentForExport(source);
 
     try {
+      await waitForDocumentFonts();
       await waitForImages(source, {
         context: "the preview content",
         throwOnError: true,
@@ -268,14 +326,14 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     const { source, restoreSource } = await ensurePrintableContent();
 
     try {
-      const logoDataUrl = await resolveLogoDataUrl(logoUrl);
-      if (logoUrl && !logoDataUrl) {
+      const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
+      if ((logoSource || logoUrl) && !logoAsset?.dataUrl) {
         throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
       }
 
       const exportDocument = await buildPdfExportDocument({
         source,
-        logoDataUrl,
+        logoDataUrl: logoAsset?.dataUrl,
       });
 
       await waitForImages(exportDocument.root, {
@@ -298,8 +356,10 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }
 
   async function handleDownloadPDF() {
-    if (!output.trim()) {
-      setError("Generate content first to export.");
+    const exportValidationError = validatePreparedExport();
+    if (exportValidationError) {
+      setError(exportValidationError);
+      toast.error(exportValidationError);
       return;
     }
 
@@ -347,23 +407,31 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }
 
   async function handleDownloadDocx() {
-    if (!output.trim()) {
-      setError("Generate content first to export.");
+    const exportValidationError = validatePreparedExport();
+    if (exportValidationError) {
+      setError(exportValidationError);
+      toast.error(exportValidationError);
       return;
     }
 
     try {
       setError("");
       setActiveExportAction("docx");
+      const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
+      if ((logoSource || logoUrl) && !logoAsset?.dataUrl) {
+        throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
+      }
+
       const docxBlob = await createDocxBlob({
         title: documentTitle,
-        content: output,
+        content: preparedExport.content,
         toolType: tool.type,
         schoolName: values.schoolName,
         className: values.className,
         subject: values.subject,
         chapter: values.chapter,
         periods: values.periods,
+        logo: logoAsset,
       });
 
       saveAs(docxBlob, `${sanitizeFileName(documentTitle)}.docx`);
@@ -379,12 +447,14 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }
 
   async function handlePrint() {
-    if (!output.trim()) {
-      setError("Generate content first to print.");
+    const exportValidationError = validatePreparedExport();
+    if (exportValidationError) {
+      setError(exportValidationError);
+      toast.error(exportValidationError);
       return;
     }
 
-    let restoreSource: (() => void) | null = null;
+    let cleanup: (() => void) | null = null;
     let finalized = false;
 
     const finalizePrint = () => {
@@ -394,15 +464,15 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
       finalized = true;
       document.body.classList.remove("pdf-print-mode");
-      restoreSource?.();
+      cleanup?.();
       setActiveExportAction(null);
     };
 
     try {
       setError("");
       setActiveExportAction("print");
-      const printableContent = await ensurePrintableContent();
-      restoreSource = printableContent.restoreSource;
+      const exportDocument = await createExportPages();
+      cleanup = exportDocument.cleanup;
 
       const onAfterPrint = () => {
         window.removeEventListener("afterprint", onAfterPrint);
@@ -471,6 +541,14 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
           </p>
         ) : null}
 
+        {preparedExport.invalidMathCount > 0 && output ? (
+          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            {preparedExport.invalidMathCount === 1
+              ? "1 equation still has invalid LaTeX. Fix it before exporting."
+              : `${preparedExport.invalidMathCount} equations still have invalid LaTeX. Fix them before exporting.`}
+          </p>
+        ) : null}
+
         {loading ? (
           <div className="mt-4">
             <LoadingDots label="AI is drafting content" />
@@ -478,7 +556,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
         ) : output ? (
           <div className="mt-4 space-y-4">
             <MarkdownPreview
-              content={output}
+              content={preparedExport.content}
               contentId="pdf-content"
               header={
                 <PDFHeader

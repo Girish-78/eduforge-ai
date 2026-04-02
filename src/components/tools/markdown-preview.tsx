@@ -18,7 +18,7 @@ export function MarkdownPreview({ content, contentId, header }: MarkdownPreviewP
       <div
         id={contentId}
         className="mx-auto w-full max-w-[794px] space-y-4 rounded-xl bg-white px-5 py-6 text-[15px] text-slate-800 shadow-sm"
-        style={{ fontFamily: "Arial, sans-serif", lineHeight: 1.6 }}
+        style={{ fontFamily: '"Helvetica Neue", Arial, sans-serif', lineHeight: 1.6 }}
       >
         {header}
         <ReactMarkdown

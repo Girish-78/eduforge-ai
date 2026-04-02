@@ -1,15 +1,15 @@
 const MM_TO_PX = 96 / 25.4;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
-const PDF_MARGIN_MM = 10;
-const PAGE_WIDTH_PX = Math.round(A4_WIDTH_MM * MM_TO_PX);
-const PAGE_HEIGHT_PX = Math.round(A4_HEIGHT_MM * MM_TO_PX);
-const PAGE_MARGIN_PX = Math.round(PDF_MARGIN_MM * MM_TO_PX);
+const PDF_MARGIN_MM = 20;
+const EXPORT_SURFACE_PADDING_PX = 20;
+const PAGE_WIDTH_PX = Math.round((A4_WIDTH_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
+const PAGE_HEIGHT_PX = Math.round((A4_HEIGHT_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
 
 export const PDF_EXPORT_SCALE = 2;
 
 export const pdfExportConfig = {
-  margin: PDF_MARGIN_MM,
+  margin: [PDF_MARGIN_MM, PDF_MARGIN_MM, PDF_MARGIN_MM, PDF_MARGIN_MM] as const,
   image: { type: "jpeg" as const, quality: 0.98 },
   html2canvas: {
     scale: PDF_EXPORT_SCALE,
@@ -43,10 +43,10 @@ const PDF_EXPORT_STYLES = `
   .pdf-export-document {
     width: ${PAGE_WIDTH_PX}px;
     box-sizing: border-box;
-    padding: ${PAGE_MARGIN_PX}px;
+    padding: ${EXPORT_SURFACE_PADDING_PX}px;
     background: #ffffff;
     color: #0f172a;
-    font-family: Arial, sans-serif;
+    font-family: "Helvetica Neue", Arial, sans-serif;
     font-size: 14px;
     line-height: 1.55;
   }
@@ -119,6 +119,27 @@ const PDF_EXPORT_STYLES = `
     bottom: -0.2em;
   }
 
+  .pdf-export-document .katex-display,
+  .pdf-export-document .pdf-formula-block,
+  .pdf-export-document .pdf-table-wrapper,
+  .pdf-export-document table,
+  .pdf-export-document thead,
+  .pdf-export-document tbody,
+  .pdf-export-document tr,
+  .pdf-export-document td,
+  .pdf-export-document th,
+  .pdf-export-document pre,
+  .pdf-export-document blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-export-document .katex-display {
+    margin: 12px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
   .pdf-export-document h1,
   .pdf-export-document h2,
   .pdf-export-document h3 {
@@ -167,20 +188,6 @@ const PDF_EXPORT_STYLES = `
 
   .pdf-export-document strong {
     font-weight: 700;
-  }
-
-  .pdf-export-document pre,
-  .pdf-export-document blockquote,
-  .pdf-export-document .pdf-formula-block,
-  .pdf-export-document .pdf-table-wrapper,
-  .pdf-export-document table,
-  .pdf-export-document thead,
-  .pdf-export-document tbody,
-  .pdf-export-document tr,
-  .pdf-export-document td,
-  .pdf-export-document th {
-    break-inside: avoid;
-    page-break-inside: avoid;
   }
 
   .pdf-export-document .pdf-table-wrapper {
@@ -315,39 +322,14 @@ function updateHeaderLogos(node: HTMLElement, logoDataUrl?: string | null) {
   });
 }
 
-export async function resolveLogoDataUrl(logoUrl?: string | null) {
-  if (!logoUrl) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(logoUrl, { mode: "cors" });
-    if (!response.ok) {
-      throw new Error(`Logo fetch failed with status ${response.status}`);
-    }
-
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-          return;
-        }
-
-        reject(new Error("Unable to read logo file."));
-      };
-      reader.onerror = () => reject(reader.error ?? new Error("Unable to read logo file."));
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error("Export failed:", error);
-    return null;
-  }
-}
-
 function describeImage(image: HTMLImageElement) {
   return image.alt?.trim() || image.currentSrc || image.src || "an image";
+}
+
+export async function waitForDocumentFonts() {
+  if ("fonts" in document) {
+    await document.fonts.ready;
+  }
 }
 
 export async function waitForImages(
@@ -436,6 +418,7 @@ export async function buildPdfExportDocument({
   documentElement.appendChild(clone);
   root.appendChild(documentElement);
 
+  await waitForDocumentFonts();
   await waitForImages(documentElement, {
     context: "the export document",
     throwOnError: true,

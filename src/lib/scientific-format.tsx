@@ -6,6 +6,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
+import katex from "katex";
+
+import { splitMathSegments } from "@/lib/export-content";
 
 const SCIENTIFIC_PATTERN =
   /([A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([A-Za-z0-9/)\]]+)_\{([^}]+)\}|([A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/g;
@@ -32,7 +35,7 @@ function renderChemicalFormula(token: string, keyPrefix: string) {
   return parts;
 }
 
-function formatScientificString(value: string) {
+function formatScientificText(value: string) {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -78,6 +81,37 @@ function formatScientificString(value: string) {
   if (lastIndex < value.length) {
     nodes.push(value.slice(lastIndex));
   }
+
+  return nodes;
+}
+
+function renderMath(value: string, displayMode: boolean, key: string) {
+  const html = katex.renderToString(value, {
+    displayMode,
+    throwOnError: false,
+  });
+
+  return (
+    <span
+      key={key}
+      className={displayMode ? "katex-block" : "katex-inline"}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function formatScientificString(value: string) {
+  const nodes: ReactNode[] = [];
+  const segments = splitMathSegments(value);
+
+  segments.forEach((segment, index) => {
+    if (segment.type === "text") {
+      nodes.push(...formatScientificText(segment.value));
+      return;
+    }
+
+    nodes.push(renderMath(segment.value, segment.displayMode, `math-${index}-${segment.value}`));
+  });
 
   return nodes;
 }

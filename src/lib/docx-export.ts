@@ -3,6 +3,7 @@ import {
   BorderStyle,
   Document,
   HeadingLevel,
+  ImageRun,
   LevelFormat,
   Packer,
   Paragraph,
@@ -13,9 +14,16 @@ import {
   WidthType,
 } from "docx";
 
+import {
+  cleanInlineMarkdown,
+  convertMarkdownMathToDocxText,
+  normalizeText,
+} from "@/lib/export-content";
+import type { ExportLogoAsset } from "@/lib/export-logo";
 import type { GenerateType } from "@/lib/prompt-templates";
 
 const NUMBERING_REFERENCE = "eduforge-numbering";
+const DOCX_FONT_FAMILY = "Times New Roman";
 
 interface DocxHeaderOptions {
   toolType: GenerateType;
@@ -25,6 +33,7 @@ interface DocxHeaderOptions {
   subject?: string;
   chapter?: string;
   periods?: string;
+  logo?: ExportLogoAsset | null;
 }
 
 interface CreateDocxBlobOptions extends DocxHeaderOptions {
@@ -36,28 +45,12 @@ type DocxBlock = Paragraph | Table;
 type RunFormat = {
   bold?: boolean;
   color?: string;
+  font?: string;
   size?: number;
 };
 
 const SCIENTIFIC_PATTERN =
-  /([A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([A-Za-z0-9/)\]]+)_\{([^}]+)\}|([A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/g;
-
-function cleanInlineMarkdown(value: string) {
-  return value
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    .replace(/~~([^~]+)~~/g, "$1")
-    .trim();
-}
-
-function normalizeText(value: string) {
-  return cleanInlineMarkdown(value).replace(/\s+/g, " ").trim().toLowerCase();
-}
+  /([\p{Script=Greek}A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)_\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([\p{Script=Greek}A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/gu;
 
 function isMarkdownTableSeparator(line: string) {
   return /^\|\s*[:\-| ]+\|?\s*$/.test(line.trim());
@@ -81,7 +74,23 @@ function createTextRun(text: string, format: RunFormat = {}) {
     text,
     bold: format.bold,
     color: format.color,
+    font: format.font ?? DOCX_FONT_FAMILY,
     size: format.size,
+  });
+}
+
+function createScriptTextRun(
+  text: string,
+  format: RunFormat,
+  script: "super" | "sub",
+) {
+  return new TextRun({
+    text,
+    color: format.color,
+    font: format.font ?? DOCX_FONT_FAMILY,
+    size: format.size,
+    superScript: script === "super",
+    subScript: script === "sub",
   });
 }
 
@@ -96,14 +105,7 @@ function buildChemicalRuns(token: string, format: RunFormat) {
       parts.push(createTextRun(token.slice(lastIndex, match.index), format));
     }
 
-    parts.push(
-      new TextRun({
-        text: match[0],
-        color: format.color,
-        size: format.size,
-        subScript: true,
-      }),
-    );
+    parts.push(createScriptTextRun(match[0], format, "sub"));
     lastIndex = digitPattern.lastIndex;
   }
 
@@ -140,44 +142,16 @@ function buildTextRuns(value: string, format: RunFormat = {}) {
 
     if (braceSupBase && braceSupValue) {
       runs.push(createTextRun(braceSupBase, format));
-      runs.push(
-        new TextRun({
-          text: braceSupValue,
-          color: format.color,
-          size: format.size,
-          superScript: true,
-        }),
-      );
+      runs.push(createScriptTextRun(braceSupValue, format, "super"));
     } else if (braceSubBase && braceSubValue) {
       runs.push(createTextRun(braceSubBase, format));
-      runs.push(
-        new TextRun({
-          text: braceSubValue,
-          color: format.color,
-          size: format.size,
-          subScript: true,
-        }),
-      );
+      runs.push(createScriptTextRun(braceSubValue, format, "sub"));
     } else if (supBase && supValue) {
       runs.push(createTextRun(supBase, format));
-      runs.push(
-        new TextRun({
-          text: supValue,
-          color: format.color,
-          size: format.size,
-          superScript: true,
-        }),
-      );
+      runs.push(createScriptTextRun(supValue, format, "super"));
     } else if (subBase && subValue) {
       runs.push(createTextRun(subBase, format));
-      runs.push(
-        new TextRun({
-          text: subValue,
-          color: format.color,
-          size: format.size,
-          subScript: true,
-        }),
-      );
+      runs.push(createScriptTextRun(subValue, format, "sub"));
     } else if (chemical) {
       runs.push(...buildChemicalRuns(chemical, format));
     } else {
@@ -243,7 +217,6 @@ function createCenteredHeaderParagraph(
     bold?: boolean;
     size?: number;
     color?: string;
-    borderBottom?: boolean;
     spacingAfter?: number;
   } = {},
 ) {
@@ -252,8 +225,26 @@ function createCenteredHeaderParagraph(
     bold: options.bold,
     size: options.size,
     color: options.color,
-    borderBottom: options.borderBottom,
     spacingAfter: options.spacingAfter,
+  });
+}
+
+function createHeaderLogoParagraph(logo: ExportLogoAsset) {
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: {
+      after: 100,
+    },
+    children: [
+      new ImageRun({
+        data: logo.bytes,
+        type: logo.imageType,
+        transformation: {
+          width: logo.width,
+          height: logo.height,
+        },
+      }),
+    ],
   });
 }
 
@@ -265,17 +256,27 @@ function buildHeaderBlocks({
   subject,
   chapter,
   periods,
+  logo,
 }: DocxHeaderOptions) {
   const blocks: Paragraph[] = [];
   const classSubject = [className?.trim(), subject?.trim()].filter(Boolean).join(" | ");
   const chapterText = chapter?.trim();
   const periodsText = periods?.trim();
-  const headerLines = [schoolName?.trim(), classSubject, chapterText].filter(Boolean);
+  const hasStructuredHeader =
+    Boolean(logo) ||
+    Boolean(schoolName?.trim()) ||
+    Boolean(classSubject) ||
+    Boolean(chapterText) ||
+    (toolType === "lesson_plan" && Boolean(periodsText));
 
-  if (headerLines.length > 0 || (toolType === "lesson_plan" && periodsText)) {
+  if (hasStructuredHeader) {
+    if (logo) {
+      blocks.push(createHeaderLogoParagraph(logo));
+    }
+
     if (schoolName?.trim()) {
       blocks.push(
-        createCenteredHeaderParagraph(schoolName.trim(), {
+        createCenteredHeaderParagraph(convertMarkdownMathToDocxText(schoolName.trim()), {
           bold: true,
           size: 32,
           color: "0F172A",
@@ -286,7 +287,7 @@ function buildHeaderBlocks({
 
     if (classSubject) {
       blocks.push(
-        createCenteredHeaderParagraph(classSubject, {
+        createCenteredHeaderParagraph(convertMarkdownMathToDocxText(classSubject), {
           bold: true,
           size: 24,
           color: "475569",
@@ -297,23 +298,29 @@ function buildHeaderBlocks({
 
     if (chapterText) {
       blocks.push(
-        createCenteredHeaderParagraph(`Chapter / Topic: ${chapterText}`, {
-          bold: true,
-          size: 24,
-          color: "475569",
-          spacingAfter: toolType === "lesson_plan" && periodsText ? 80 : 140,
-        }),
+        createCenteredHeaderParagraph(
+          `Chapter / Topic: ${convertMarkdownMathToDocxText(chapterText)}`,
+          {
+            bold: true,
+            size: 24,
+            color: "475569",
+            spacingAfter: toolType === "lesson_plan" && periodsText ? 80 : 140,
+          },
+        ),
       );
     }
 
     if (toolType === "lesson_plan" && periodsText) {
       blocks.push(
-        createCenteredHeaderParagraph(`Total Periods: ${periodsText}`, {
-          bold: true,
-          size: 24,
-          color: "475569",
-          spacingAfter: 140,
-        }),
+        createCenteredHeaderParagraph(
+          `Total Periods: ${convertMarkdownMathToDocxText(periodsText)}`,
+          {
+            bold: true,
+            size: 24,
+            color: "475569",
+            spacingAfter: 140,
+          },
+        ),
       );
     }
 
@@ -330,10 +337,7 @@ function buildHeaderBlocks({
         },
       }),
     );
-  }
-
-  const firstContentLine = title.trim();
-  if (firstContentLine) {
+  } else if (title.trim()) {
     blocks.push(
       createParagraphFromText(title, {
         heading: HeadingLevel.HEADING_1,
@@ -410,7 +414,7 @@ function isSpecialBlock(line: string, nextLine?: string) {
 }
 
 function buildBodyBlocks(markdown: string, title: string) {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const lines = convertMarkdownMathToDocxText(markdown).replace(/\r\n/g, "\n").split("\n");
   const blocks: DocxBlock[] = [];
   let index = 0;
   let insertedTitle = false;
@@ -534,6 +538,7 @@ export async function createDocxBlob({
   subject,
   chapter,
   periods,
+  logo,
 }: CreateDocxBlobOptions) {
   const body = buildBodyBlocks(content, title);
   const document = new Document({
@@ -574,6 +579,7 @@ export async function createDocxBlob({
             subject,
             chapter,
             periods,
+            logo,
           }),
           ...body.blocks,
         ],

@@ -1,10 +1,12 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
+
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { toast } from "sonner";
+
 import {
   disabledButtonClassName,
   disabledButtonStateClassName,
@@ -12,6 +14,7 @@ import {
   primaryButtonClassName,
   successButtonStateClassName,
 } from "@/lib/button-styles";
+import { resolveFirebaseStorageDownloadUrl } from "@/lib/export-logo";
 import {
   getFirebaseClientApp,
   getFirebaseClientFirestore,
@@ -82,12 +85,25 @@ export default function SettingsPage() {
 
       try {
         const snapshot = await getDoc(doc(db, "users", user.uid));
-        setLogoUrl((snapshot.data()?.logoUrl as string | undefined) ?? "");
+        const data = snapshot.data() ?? {};
+        const logoSource =
+          (typeof data.logoPath === "string" && data.logoPath.trim()) ||
+          ((data.logoUrl as string | undefined) ?? "");
+
+        if (logoSource) {
+          try {
+            const resolvedLogoUrl = await resolveFirebaseStorageDownloadUrl(logoSource);
+            setLogoUrl(resolvedLogoUrl ?? "");
+          } catch (logoResolveError) {
+            console.error("Settings logo resolve error", logoResolveError);
+            setLogoUrl(typeof data.logoUrl === "string" ? data.logoUrl : "");
+          }
+        } else {
+          setLogoUrl("");
+        }
       } catch (loadError) {
         console.error("Settings profile load error", loadError);
-        setError(
-          loadError instanceof Error ? loadError.message : "Unable to load profile.",
-        );
+        setError(loadError instanceof Error ? loadError.message : "Unable to load profile.");
       } finally {
         setLoading(false);
       }
@@ -128,67 +144,60 @@ export default function SettingsPage() {
     const storage = getFirebaseClientStorage();
     const db = getFirebaseClientFirestore();
 
-    try {
-      const user = auth.currentUser;
-
-      if (!user) {
-        throw new Error("User not logged in");
-      }
-
-      console.log("User:", user.uid);
-      console.log("File:", file);
-
-      if (!file.type.startsWith("image/")) {
-        throw new Error("Only image files allowed");
-      }
-
-      if (!ALLOWED_TYPES.has(file.type)) {
-        throw new Error("Only PNG and JPG files are allowed");
-      }
-
-      if (file.size > MAX_FILE_SIZE) {
-        throw new Error("File must be less than 5MB");
-      }
-
-      const storageRef = ref(storage, `users/${user.uid}/logo.png`);
-      const snapshot = await new Promise<import("firebase/storage").UploadTaskSnapshot>(
-        (resolve, reject) => {
-          const uploadTask = uploadBytesResumable(storageRef, file, {
-            contentType: file.type,
-          });
-
-          uploadTask.on(
-            "state_changed",
-            (taskSnapshot) => {
-              const progress = Math.round(
-                (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) * 100,
-              );
-              setUploadProgress(progress);
-              setStatusMessage(`Uploading ${progress}%`);
-            },
-            (taskError) => reject(taskError),
-            () => resolve(uploadTask.snapshot),
-          );
-        },
-      );
-      const downloadURL = await getDownloadURL(snapshot.ref);
-
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          uid: user.uid,
-          email: user.email ?? "",
-          logoUrl: downloadURL,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-
-      return downloadURL;
-    } catch (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw uploadError;
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error("User not logged in");
     }
+
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Only image files allowed");
+    }
+
+    if (!ALLOWED_TYPES.has(file.type)) {
+      throw new Error("Only PNG and JPG files are allowed");
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error("File must be less than 5MB");
+    }
+
+    const logoPath = `users/${user.uid}/logo.png`;
+    const storageRef = ref(storage, logoPath);
+    const snapshot = await new Promise<import("firebase/storage").UploadTaskSnapshot>(
+      (resolve, reject) => {
+        const uploadTask = uploadBytesResumable(storageRef, file, {
+          contentType: file.type,
+        });
+
+        uploadTask.on(
+          "state_changed",
+          (taskSnapshot) => {
+            const progress = Math.round(
+              (taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) * 100,
+            );
+            setUploadProgress(progress);
+            setStatusMessage(`Uploading ${progress}%`);
+          },
+          (taskError) => reject(taskError),
+          () => resolve(uploadTask.snapshot),
+        );
+      },
+    );
+    const downloadURL = await getDownloadURL(snapshot.ref);
+
+    await setDoc(
+      doc(db, "users", user.uid),
+      {
+        uid: user.uid,
+        email: user.email ?? "",
+        logoUrl: downloadURL,
+        logoPath,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    return downloadURL;
   }
 
   async function onUploadLogo() {
@@ -248,15 +257,13 @@ export default function SettingsPage() {
       <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Upload a school logo to use automatically in PDF exports.
+          Upload a school logo to use automatically in PDF and DOCX exports.
         </p>
       </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">PDF Logo</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Accepted formats: JPG and PNG.
-        </p>
+        <p className="mt-1 text-sm text-slate-600">Accepted formats: JPG and PNG.</p>
 
         {error ? (
           <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -316,9 +323,7 @@ export default function SettingsPage() {
                           </p>
                         </>
                       ) : (
-                        <p className="text-sm text-slate-500">
-                          No file selected yet.
-                        </p>
+                        <p className="text-sm text-slate-500">No file selected yet.</p>
                       )}
                     </div>
                   </div>
@@ -353,7 +358,7 @@ export default function SettingsPage() {
                       Uploading...
                     </>
                   ) : uploadStatus === "success" ? (
-                    "Uploaded ✓"
+                    "Uploaded"
                   ) : (
                     "Upload Logo"
                   )}

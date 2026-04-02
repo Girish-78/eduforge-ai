@@ -1,11 +1,48 @@
 import { randomUUID } from "crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
-import { getDb, getStorageBucket } from "@/lib/firebase-admin";
+
+import {
+  getAuth as getAdminAuth,
+  getDb,
+  getStorageBucket,
+} from "@/lib/firebase-admin";
 import { getServerSessionUser } from "@/lib/session";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+async function getProfileReferences(email: string) {
+  const db = getDb();
+  const authUser = await getAdminAuth().getUserByEmail(email);
+  const primaryRef = db.collection("users").doc(authUser.uid);
+  const legacyRef = db.collection("users").doc(email);
+  const [primaryDoc, legacyDoc] = await Promise.all([primaryRef.get(), legacyRef.get()]);
+
+  return {
+    email,
+    uid: authUser.uid,
+    primaryDoc,
+    primaryRef,
+    legacyDoc,
+    legacyRef,
+  };
+}
+
+function getExistingProfileData(
+  primaryDoc: FirebaseFirestore.DocumentSnapshot,
+  legacyDoc: FirebaseFirestore.DocumentSnapshot,
+) {
+  if (primaryDoc.exists) {
+    return primaryDoc.data() ?? {};
+  }
+
+  if (legacyDoc.exists) {
+    return legacyDoc.data() ?? {};
+  }
+
+  return null;
+}
 
 export async function GET() {
   const session = await getServerSessionUser();
@@ -14,21 +51,21 @@ export async function GET() {
   }
 
   try {
-    const db = getDb();
-    const userDoc = await db.collection("users").doc(session.email).get();
+    const { email, primaryDoc, legacyDoc } = await getProfileReferences(session.email);
+    const data = getExistingProfileData(primaryDoc, legacyDoc);
 
-    if (!userDoc.exists) {
+    if (!data) {
       return NextResponse.json({ error: "User profile not found." }, { status: 404 });
     }
 
-    const data = userDoc.data() ?? {};
     return NextResponse.json({
       user: {
-        email: session.email,
+        email,
         name: data.name ?? "",
         role: data.role ?? null,
         plan: data.plan ?? "free",
         logoUrl: data.logoUrl ?? "",
+        logoPath: data.logoPath ?? "",
       },
     });
   } catch (error) {
@@ -71,16 +108,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const db = getDb();
     const bucket = getStorageBucket();
-    const userRef = db.collection("users").doc(session.email);
-    const existingDoc = await userRef.get();
+    const refs = await getProfileReferences(session.email);
+    const existingData = getExistingProfileData(refs.primaryDoc, refs.legacyDoc);
 
-    if (!existingDoc.exists) {
+    if (!existingData) {
       return NextResponse.json({ error: "User profile not found." }, { status: 404 });
     }
 
-    const objectPath = `users/${session.email}/logo.png`;
+    const objectPath = `users/${refs.uid}/logo.png`;
     const token = randomUUID();
     const buffer = Buffer.from(await file.arrayBuffer());
     const uploadedFile = bucket.file(objectPath);
@@ -97,22 +133,27 @@ export async function POST(request: Request) {
     });
 
     const logoUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-    const previousPath = existingDoc.data()?.logoPath as string | undefined;
+    const previousPath = typeof existingData.logoPath === "string" ? existingData.logoPath : "";
 
-    await userRef.set(
-      {
-        logoUrl,
-        logoPath: objectPath,
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true },
-    );
+    const update = {
+      uid: refs.uid,
+      email: refs.email,
+      logoUrl,
+      logoPath: objectPath,
+      updatedAt: Timestamp.now(),
+    };
+
+    await refs.primaryRef.set(update, { merge: true });
+
+    if (refs.legacyRef.id !== refs.primaryRef.id && refs.legacyDoc.exists) {
+      await refs.legacyRef.set(update, { merge: true });
+    }
 
     if (previousPath && previousPath !== objectPath) {
       await bucket.file(previousPath).delete({ ignoreNotFound: true });
     }
 
-    return NextResponse.json({ success: true, logoUrl });
+    return NextResponse.json({ success: true, logoUrl, logoPath: objectPath });
   } catch (error) {
     console.error("/api/profile POST error", error);
     return NextResponse.json(
