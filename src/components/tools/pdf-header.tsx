@@ -9,7 +9,7 @@ interface PDFHeaderProps {
   subject?: string;
   chapter?: string;
   periods?: string;
-  logoUrl?: string;
+  logoSrc?: string;
 }
 
 interface PDFHeaderConfig {
@@ -42,23 +42,23 @@ export function PDFHeader({
   subject,
   chapter,
   periods,
-  logoUrl,
+  logoSrc,
 }: PDFHeaderProps) {
   const config = getPDFHeaderConfig(toolType);
   const classSubject = [className?.trim(), subject?.trim()].filter(Boolean).join(" | ");
   const chapterText = chapter?.trim();
   const periodsText = periods?.trim();
 
-  if (!logoUrl && !schoolName?.trim() && !classSubject && !chapterText && !periodsText) {
+  if (!logoSrc && !schoolName?.trim() && !classSubject && !chapterText && !periodsText) {
     return null;
   }
 
   return (
     <header className="pdf-header" data-pdf-header="true">
       <div className="pdf-header__inner">
-        {logoUrl ? (
+        {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="School logo" className="pdf-header__logo" />
+          <img src={logoSrc} alt="School logo" className="pdf-header__logo" />
         ) : null}
 
         {schoolName?.trim() ? (

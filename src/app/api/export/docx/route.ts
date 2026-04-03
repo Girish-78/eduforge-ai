@@ -46,7 +46,14 @@ export async function POST(request: Request) {
       throw new Error("DOCX export content is undefined or empty.");
     }
 
-    const logoAsset = await loadExportLogoAsset(payload);
+    let logoAsset: Awaited<ReturnType<typeof loadExportLogoAsset>> = null;
+    if (payload.logo?.downloadUrl) {
+      try {
+        logoAsset = await loadExportLogoAsset(payload);
+      } catch (logoError) {
+        console.error("DOCX export logo fallback applied", logoError);
+      }
+    }
     console.log("DOCX export logo processed", {
       hasLogo: Boolean(logoAsset),
       logoBytes: logoAsset?.buffer.length ?? 0,

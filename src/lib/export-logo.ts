@@ -66,6 +66,34 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+function getLogoProxyUrl(url: string) {
+  if (typeof window === "undefined") {
+    return url;
+  }
+
+  const proxyUrl = new URL("/api/export/logo", window.location.origin);
+  proxyUrl.searchParams.set("url", url);
+  return proxyUrl.toString();
+}
+
+async function fetchLogoBlob(url: string) {
+  const response = await fetch(getLogoProxyUrl(url), {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`School logo could not be loaded (status ${response.status}).`);
+  }
+
+  const blob = await response.blob();
+  if (!blob.type.startsWith("image/")) {
+    throw new Error("School logo must be a PNG or JPG image.");
+  }
+
+  return blob;
+}
+
 function getFittedDimensions(width: number, height: number) {
   if (!width || !height) {
     return {
@@ -113,21 +141,18 @@ export async function resolveFirebaseStorageDownloadUrl(source?: string | null) 
   return getDownloadURL(ref(getFirebaseClientStorage(), storageSource));
 }
 
+export async function toBase64(url: string) {
+  const blob = await fetchLogoBlob(url);
+  return blobToDataUrl(blob);
+}
+
 export async function prepareLogoAsset(source?: string | null): Promise<ExportLogoAsset | null> {
   const downloadUrl = await resolveFirebaseStorageDownloadUrl(source);
   if (!downloadUrl) {
     return null;
   }
 
-  const response = await fetch(downloadUrl, { mode: "cors" });
-  if (!response.ok) {
-    throw new Error(`School logo could not be loaded (status ${response.status}).`);
-  }
-
-  const blob = await response.blob();
-  if (!blob.type.startsWith("image/")) {
-    throw new Error("School logo must be a PNG or JPG image.");
-  }
+  const blob = await fetchLogoBlob(downloadUrl);
 
   const [arrayBuffer, dataUrl] = await Promise.all([blob.arrayBuffer(), blobToDataUrl(blob)]);
   const dimensions = await getImageDimensions(dataUrl).catch(() => ({

@@ -16,8 +16,8 @@ import {
 } from "@/lib/button-styles";
 import { prepareExportMarkdown } from "@/lib/export-content";
 import {
-  prepareLogoAsset,
   resolveFirebaseStorageDownloadUrl,
+  toBase64,
 } from "@/lib/export-logo";
 import type { ExportFilePayload } from "@/lib/export-types";
 import {
@@ -145,6 +145,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   const [usageWarning, setUsageWarning] = useState("");
   const [logoSource, setLogoSource] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoBase64, setLogoBase64] = useState("");
   const [activeExportAction, setActiveExportAction] = useState<ExportAction>(null);
 
   const documentTitle = useMemo(() => {
@@ -177,12 +178,28 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     const auth = getAuth(getFirebaseClientApp());
     const db = getFirebaseClientFirestore();
 
+    async function loadExportLogoPreview(nextLogoUrl: string) {
+      if (!nextLogoUrl) {
+        setLogoBase64("");
+        return;
+      }
+
+      try {
+        const nextLogoBase64 = await toBase64(nextLogoUrl);
+        setLogoBase64(nextLogoBase64);
+      } catch (logoPreviewError) {
+        console.error("ToolGenerator logo base64 error", logoPreviewError);
+        setLogoBase64("");
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setProfileLoading(true);
 
       if (!user) {
         setLogoSource("");
         setLogoUrl("");
+        setLogoBase64("");
         setProfileLoading(false);
         return;
       }
@@ -198,16 +215,22 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
         if (nextLogoSource) {
           try {
             const resolvedLogoUrl = await resolveFirebaseStorageDownloadUrl(nextLogoSource);
-            setLogoUrl(resolvedLogoUrl ?? "");
+            const nextResolvedLogoUrl = resolvedLogoUrl ?? "";
+            setLogoUrl(nextResolvedLogoUrl);
+            await loadExportLogoPreview(nextResolvedLogoUrl);
           } catch (logoResolveError) {
             console.error("ToolGenerator logo resolve error", logoResolveError);
-            setLogoUrl(typeof data.logoUrl === "string" ? data.logoUrl : "");
+            const fallbackLogoUrl = typeof data.logoUrl === "string" ? data.logoUrl : "";
+            setLogoUrl(fallbackLogoUrl);
+            await loadExportLogoPreview(fallbackLogoUrl);
           }
         } else {
           setLogoUrl("");
+          setLogoBase64("");
         }
       } catch (profileError) {
         console.error("ToolGenerator profile load error", profileError);
+        setLogoBase64("");
       } finally {
         setProfileLoading(false);
       }
@@ -347,14 +370,9 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     const { source, restoreSource } = await ensurePrintableContent();
 
     try {
-      const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
-      if ((logoSource || logoUrl) && !logoAsset?.dataUrl) {
-        throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
-      }
-
       const exportDocument = await buildPdfExportDocument({
         source,
-        logoDataUrl: logoAsset?.dataUrl,
+        logoDataUrl: logoBase64 || null,
       });
 
       await waitForImages(exportDocument.root, {
@@ -378,10 +396,11 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
 
   async function createExportPayload(): Promise<ExportFilePayload> {
     const resolvedLogoUrl =
-      logoUrl || (await resolveFirebaseStorageDownloadUrl(logoSource || logoUrl));
-    if ((logoSource || logoUrl) && !resolvedLogoUrl) {
-      throw new Error("School logo could not be prepared for export. Please re-upload it and try again.");
-    }
+      logoUrl ||
+      (await resolveFirebaseStorageDownloadUrl(logoSource || logoUrl).catch((logoResolveError) => {
+        console.error("ToolGenerator export logo resolve error", logoResolveError);
+        return null;
+      }));
 
     return {
       title: documentTitle,
@@ -589,7 +608,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
                   subject={values.subject}
                   chapter={values.chapter}
                   periods={values.periods}
-                  logoUrl={logoUrl}
+                  logoSrc={logoBase64}
                 />
               }
             />

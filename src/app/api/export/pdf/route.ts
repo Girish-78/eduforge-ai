@@ -45,7 +45,14 @@ export async function POST(request: Request) {
       throw new Error("PDF export content is undefined or empty.");
     }
 
-    const logoAsset = await loadExportLogoAsset(payload);
+    let logoAsset: Awaited<ReturnType<typeof loadExportLogoAsset>> = null;
+    if (payload.logo?.downloadUrl) {
+      try {
+        logoAsset = await loadExportLogoAsset(payload);
+      } catch (logoError) {
+        console.error("PDF export logo fallback applied", logoError);
+      }
+    }
     console.log("PDF export logo processed", {
       hasLogo: Boolean(logoAsset),
       logoBytes: logoAsset?.buffer.length ?? 0,
