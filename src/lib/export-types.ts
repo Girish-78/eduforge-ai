@@ -2,9 +2,9 @@ import type { GenerateType } from "@/lib/prompt-templates";
 
 export interface ExportLogoPayload {
   downloadUrl: string;
-  imageType: "jpg" | "png";
-  width: number;
-  height: number;
+  imageType?: "jpg" | "png";
+  width?: number;
+  height?: number;
 }
 
 export interface ExportFilePayload {

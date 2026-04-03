@@ -377,9 +377,10 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }
 
   async function createExportPayload(): Promise<ExportFilePayload> {
-    const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
-    if ((logoSource || logoUrl) && !logoAsset?.downloadUrl) {
-      throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
+    const resolvedLogoUrl =
+      logoUrl || (await resolveFirebaseStorageDownloadUrl(logoSource || logoUrl));
+    if ((logoSource || logoUrl) && !resolvedLogoUrl) {
+      throw new Error("School logo could not be prepared for export. Please re-upload it and try again.");
     }
 
     return {
@@ -391,12 +392,9 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       subject: values.subject,
       chapter: values.chapter,
       periods: values.periods,
-      logo: logoAsset
+      logo: resolvedLogoUrl
         ? {
-            downloadUrl: logoAsset.downloadUrl,
-            imageType: logoAsset.imageType,
-            width: logoAsset.width,
-            height: logoAsset.height,
+            downloadUrl: resolvedLogoUrl,
           }
         : null,
     };

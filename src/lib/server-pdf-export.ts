@@ -167,22 +167,29 @@ function addHeader(
   doc: jsPDF,
   state: PdfState,
   payload: ExportFilePayload,
-  logoDataUrl?: string | null,
+  logo?:
+    | {
+        dataUrl: string;
+        imageType: "jpg" | "png";
+        width: number;
+        height: number;
+      }
+    | null,
 ) {
   const classSubject = [payload.className, payload.subject].filter(Boolean).join(" | ");
 
-  if (logoDataUrl && payload.logo?.width && payload.logo.height) {
+  if (logo?.dataUrl && logo.width && logo.height) {
     const scale = Math.min(
-      MAX_LOGO_WIDTH_MM / payload.logo.width,
-      MAX_LOGO_HEIGHT_MM / payload.logo.height,
+      MAX_LOGO_WIDTH_MM / logo.width,
+      MAX_LOGO_HEIGHT_MM / logo.height,
       1,
     );
-    const width = Math.max(1, payload.logo.width * scale);
-    const height = Math.max(1, payload.logo.height * scale);
+    const width = Math.max(1, logo.width * scale);
+    const height = Math.max(1, logo.height * scale);
     ensurePageSpace(doc, state, height + 6);
     doc.addImage(
-      logoDataUrl,
-      payload.logo.imageType === "jpg" ? "JPEG" : "PNG",
+      logo.dataUrl,
+      logo.imageType === "jpg" ? "JPEG" : "PNG",
       PAGE_MARGIN_MM + (CONTENT_WIDTH_MM - width) / 2,
       state.y,
       width,
@@ -301,17 +308,24 @@ function renderTable(
 
 export async function createPdfBuffer({
   payload,
-  logoDataUrl,
+  logo,
 }: {
   payload: ExportFilePayload;
-  logoDataUrl?: string | null;
+  logo?:
+    | {
+        dataUrl: string;
+        imageType: "jpg" | "png";
+        width: number;
+        height: number;
+      }
+    | null;
 }) {
   const doc = await createPdfDocument();
   const state: PdfState = { y: PAGE_MARGIN_MM };
   const lines = convertMarkdownMathToDocxText(payload.content).replace(/\r\n/g, "\n").split("\n");
   let index = 0;
 
-  addHeader(doc, state, payload, logoDataUrl);
+  addHeader(doc, state, payload, logo);
 
   while (index < lines.length) {
     const rawLine = lines[index] ?? "";
