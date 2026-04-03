@@ -62,6 +62,7 @@ export async function POST(request: Request) {
     const blob = await createDocxBlob({
       title: payload.title,
       content: payload.content,
+      exportTextContent: payload.exportTextContent,
       toolType: payload.toolType,
       schoolName: payload.schoolName,
       className: payload.className,

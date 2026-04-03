@@ -14,10 +14,33 @@ export interface ExportHeaderMetadata {
 
 export interface PreparedExportMarkdown {
   content: string;
+  exportTextContent: string;
+  blocks: ExportContentBlock[];
   invalidMathCount: number;
   mathExpressionCount: number;
   strippedHeaderLineCount: number;
 }
+
+export type ExportContentBlock =
+  | {
+      type: "heading";
+      level: 1 | 2 | 3;
+      text: string;
+    }
+  | {
+      type: "paragraph";
+      text: string;
+    }
+  | {
+      type: "list";
+      ordered: boolean;
+      items: string[];
+    }
+  | {
+      type: "table";
+      headerCells: string[];
+      bodyRows: string[][];
+    };
 
 type MathSegment =
   | { type: "text"; value: string }
@@ -169,6 +192,46 @@ const LATEX_COMMAND_TO_UNICODE: Record<string, string> = {
   prod: "\u220F",
 };
 
+const HTML_BREAK_PATTERN = /<br\s*\/?>/gi;
+const HTML_BLOCK_OPEN_PATTERN =
+  /<(?:p|div|section|article|header|footer|aside|main|blockquote|pre|figure|figcaption)\b[^>]*>/gi;
+const HTML_BLOCK_CLOSE_PATTERN =
+  /<\/(?:p|div|section|article|header|footer|aside|main|blockquote|pre|figure|figcaption)>/gi;
+const HTML_LIST_OPEN_PATTERN = /<(?:ul|ol)\b[^>]*>/gi;
+const HTML_LIST_CLOSE_PATTERN = /<\/(?:ul|ol)>/gi;
+const HTML_LIST_ITEM_OPEN_PATTERN = /<li\b[^>]*>/gi;
+const HTML_LIST_ITEM_CLOSE_PATTERN = /<\/li>/gi;
+const HTML_HEADING_OPEN_PATTERN = /<h([1-6])\b[^>]*>/gi;
+const HTML_HEADING_CLOSE_PATTERN = /<\/h[1-6]>/gi;
+const HTML_TABLE_OPEN_PATTERN = /<(?:table|thead|tbody|tfoot)\b[^>]*>/gi;
+const HTML_TABLE_CLOSE_PATTERN = /<\/(?:table|thead|tbody|tfoot)>/gi;
+const HTML_TABLE_ROW_OPEN_PATTERN = /<tr\b[^>]*>/gi;
+const HTML_TABLE_ROW_CLOSE_PATTERN = /<\/tr>/gi;
+const HTML_TABLE_CELL_OPEN_PATTERN = /<t[dh]\b[^>]*>/gi;
+const HTML_TABLE_CELL_CLOSE_PATTERN = /<\/t[dh]>/gi;
+const HTML_TAG_PATTERN = /<\/?[^>]+(>|$)/g;
+const HTML_ENTITY_MAP: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+};
+const ASCII_DIAGRAM_SIGNAL_PATTERN =
+  /(?:->|=>|→|[|\\/]|[-=]{2,}>?|[│┆┇┊┋╎╏─━┄┅┈┉┠┨┯┷┼┌┐└┘├┤┬┴╭╮╯╰])/;
+const ASCII_CONNECTOR_ONLY_PATTERN =
+  /^[\s|\\/<>^vV=._\-│┆┇┊┋╎╏─━┄┅┈┉┠┨┯┷┼┌┐└┘├┤┬┴╭╮╯╰]+$/;
+const ASCII_DIAGRAM_SPLIT_PATTERN =
+  /\s*(?:->|=>|→|[-=]{2,}>?|[|\\/│┆┇┊┋╎╏─━┄┅┈┉┠┨┯┷┼┌┐└┘├┤┬┴╭╮╯╰]+|\s+[vV^]+\s+)\s*/g;
+
+const UNORDERED_LIST_PATTERN = /^\s*[-*+•·●▪◦‣]\s+(.+)$/;
+const ORDERED_LIST_PATTERN = /^\s*(\d+)[.)]\s+(.+)$/;
+const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
+const DIAGRAM_SECTION_HEADING_PATTERN = /^#{1,6}\s+diagram\s*\/\s*flowchart/i;
+const PHYSICS_DIAGRAM_PATTERN =
+  /\b(ray|light|lens|mirror|circuit|force|prism|magnet|apparatus|reflection|refraction|image)\b/i;
+
 export function cleanInlineMarkdown(value: string) {
   return value
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
@@ -180,6 +243,486 @@ export function cleanInlineMarkdown(value: string) {
     .replace(/(^|[\s(])\*([^*]+)\*(?=[\s).,;:!?]|$)/g, "$1$2")
     .replace(/(^|[\s(])_([^_]+)_(?=[\s).,;:!?]|$)/g, "$1$2")
     .trim();
+}
+
+function decodeHtmlEntities(value: string) {
+  return value.replace(/&(nbsp|amp|lt|gt|quot|#39);/g, (entity) => {
+    return HTML_ENTITY_MAP[entity] ?? entity;
+  });
+}
+
+function normalizeParagraphSpacing(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function isMarkdownTableSeparator(line: string) {
+  return /^\|\s*[:\-| ]+\|?\s*$/.test(line.trim());
+}
+
+function isMarkdownTableRow(line: string) {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|");
+}
+
+function parseMarkdownTableRow(line: string) {
+  return line
+    .trim()
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cleanInlineMarkdown(cell.trim()));
+}
+
+function isStructuredBlockLine(line: string, nextLine?: string) {
+  if (!line.trim()) {
+    return true;
+  }
+
+  if (/^(#{1,3})\s+.+$/.test(line)) {
+    return true;
+  }
+
+  if (/^\s*[-*+]\s+.+$/.test(line)) {
+    return true;
+  }
+
+  if (/^\s*\d+\.\s+.+$/.test(line)) {
+    return true;
+  }
+
+  return isMarkdownTableRow(line) && isMarkdownTableSeparator(nextLine ?? "");
+}
+
+export function buildStructuredExportBlocks(content: string): ExportContentBlock[] {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ExportContentBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const rawLine = lines[index] ?? "";
+    const line = rawLine.trim();
+
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownTableRow(line) && isMarkdownTableSeparator(lines[index + 1] ?? "")) {
+      const headerCells = parseMarkdownTableRow(line);
+      const bodyRows: string[][] = [];
+      index += 2;
+
+      while (index < lines.length && isMarkdownTableRow(lines[index] ?? "")) {
+        bodyRows.push(parseMarkdownTableRow(lines[index] ?? ""));
+        index += 1;
+      }
+
+      blocks.push({
+        type: "table",
+        headerCells,
+        bodyRows,
+      });
+      continue;
+    }
+
+    const headingMatch = rawLine.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      blocks.push({
+        type: "heading",
+        level: Math.min(headingMatch[1].length, 3) as 1 | 2 | 3,
+        text: cleanInlineMarkdown(headingMatch[2]),
+      });
+      index += 1;
+      continue;
+    }
+
+    const unorderedMatch = rawLine.match(/^\s*[-*+]\s+(.+)$/);
+    if (unorderedMatch) {
+      const items: string[] = [];
+
+      while (index < lines.length) {
+        const nextMatch = (lines[index] ?? "").match(/^\s*[-*+]\s+(.+)$/);
+        if (!nextMatch) {
+          break;
+        }
+
+        items.push(cleanInlineMarkdown(nextMatch[1]));
+        index += 1;
+      }
+
+      blocks.push({
+        type: "list",
+        ordered: false,
+        items,
+      });
+      continue;
+    }
+
+    const orderedMatch = rawLine.match(/^\s*\d+\.\s+(.+)$/);
+    if (orderedMatch) {
+      const items: string[] = [];
+
+      while (index < lines.length) {
+        const nextMatch = (lines[index] ?? "").match(/^\s*\d+\.\s+(.+)$/);
+        if (!nextMatch) {
+          break;
+        }
+
+        items.push(cleanInlineMarkdown(nextMatch[1]));
+        index += 1;
+      }
+
+      blocks.push({
+        type: "list",
+        ordered: true,
+        items,
+      });
+      continue;
+    }
+
+    const paragraphLines = [line];
+    index += 1;
+
+    while (index < lines.length) {
+      const nextLine = lines[index] ?? "";
+      if (isStructuredBlockLine(nextLine, lines[index + 1])) {
+        break;
+      }
+
+      paragraphLines.push(nextLine.trim());
+      index += 1;
+    }
+
+    blocks.push({
+      type: "paragraph",
+      text: cleanInlineMarkdown(paragraphLines.join(" ")),
+    });
+  }
+
+  return blocks;
+}
+
+function getPipeSeparatedCells(line: string) {
+  const trimmed = line.trim();
+  if (
+    !trimmed ||
+    !trimmed.includes("|") ||
+    isMarkdownTableRow(trimmed) ||
+    isMarkdownTableSeparator(trimmed) ||
+    /(?:->|=>|→)/.test(trimmed)
+  ) {
+    return null;
+  }
+
+  const cells = trimmed.split("|").map((cell) => cleanInlineMarkdown(cell.trim()));
+  if (cells.length < 2 || cells.some((cell) => !cell)) {
+    return null;
+  }
+
+  return cells;
+}
+
+function normalizePipeSeparatedTables(value: string) {
+  const lines = value.split("\n");
+  const normalizedLines: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const firstRow = getPipeSeparatedCells(lines[index] ?? "");
+    if (!firstRow) {
+      normalizedLines.push(lines[index] ?? "");
+      index += 1;
+      continue;
+    }
+
+    const rows = [firstRow];
+    let cursor = index + 1;
+
+    while (cursor < lines.length) {
+      const nextRow = getPipeSeparatedCells(lines[cursor] ?? "");
+      if (!nextRow || nextRow.length !== firstRow.length) {
+        break;
+      }
+
+      rows.push(nextRow);
+      cursor += 1;
+    }
+
+    if (rows.length < 2) {
+      normalizedLines.push(lines[index] ?? "");
+      index += 1;
+      continue;
+    }
+
+    normalizedLines.push(`| ${rows[0].join(" | ")} |`);
+    normalizedLines.push(`| ${rows[0].map(() => "---").join(" | ")} |`);
+    rows.slice(1).forEach((row) => {
+      normalizedLines.push(`| ${row.join(" | ")} |`);
+    });
+    index = cursor;
+  }
+
+  return normalizedLines.join("\n");
+}
+
+function normalizeListFormatting(value: string) {
+  const lines = value.split("\n");
+  const normalizedLines: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const rawLine = lines[index] ?? "";
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      normalizedLines.push("");
+      index += 1;
+      continue;
+    }
+
+    if (isMarkdownTableRow(trimmed) || isMarkdownTableSeparator(trimmed)) {
+      normalizedLines.push(rawLine);
+      index += 1;
+      continue;
+    }
+
+    const headingMatch = trimmed.match(HEADING_PATTERN);
+    if (headingMatch) {
+      normalizedLines.push(`${headingMatch[1]} ${headingMatch[2].trim()}`);
+      index += 1;
+      continue;
+    }
+
+    const bulletMatch = trimmed.match(UNORDERED_LIST_PATTERN);
+    if (bulletMatch) {
+      normalizedLines.push(`- ${bulletMatch[1].trim()}`);
+      index += 1;
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(ORDERED_LIST_PATTERN);
+    if (!orderedMatch) {
+      normalizedLines.push(rawLine);
+      index += 1;
+      continue;
+    }
+
+    const orderedBlock: { marker: number; content: string }[] = [];
+    let cursor = index;
+
+    while (cursor < lines.length) {
+      const nextTrimmed = (lines[cursor] ?? "").trim();
+      const nextMatch = nextTrimmed.match(ORDERED_LIST_PATTERN);
+      if (!nextMatch) {
+        break;
+      }
+
+      orderedBlock.push({
+        marker: Number(nextMatch[1]),
+        content: nextMatch[2].trim(),
+      });
+      cursor += 1;
+    }
+
+    const hasRepeatedMarkerPattern =
+      orderedBlock.length > 1 &&
+      orderedBlock.every((item) => item.marker === orderedBlock[0].marker);
+
+    if (hasRepeatedMarkerPattern) {
+      orderedBlock.forEach((item) => {
+        normalizedLines.push(`- ${item.content}`);
+      });
+    } else {
+      orderedBlock.forEach((item, orderedIndex) => {
+        normalizedLines.push(`${orderedIndex + 1}. ${item.content}`);
+      });
+    }
+
+    index = cursor;
+  }
+
+  return normalizedLines.join("\n");
+}
+
+type DiagramNormalizationResult = {
+  line: string;
+  wasDiagramLine: boolean;
+};
+
+function formatDiagramBranchLines(label: string, branches: string[]) {
+  const normalizedLabel = cleanInlineMarkdown(label.replace(/[:\-–—]+$/, "").trim());
+  const normalizedBranches = branches
+    .map((branch) => cleanInlineMarkdown(branch))
+    .filter(Boolean);
+
+  if (!normalizedLabel && normalizedBranches.length === 0) {
+    return "";
+  }
+
+  if (normalizedBranches.length === 0) {
+    return normalizedLabel;
+  }
+
+  const prefixFormatter = PHYSICS_DIAGRAM_PATTERN.test(`${normalizedLabel} ${normalizedBranches.join(" ")}`)
+    ? (branch: string, index: number) => `${index + 1}. ${branch}`
+    : (branch: string) => `- ${branch}`;
+
+  return `${normalizedLabel || "Diagram"}:\n${normalizedBranches
+    .map((branch, index) => prefixFormatter(branch, index))
+    .join("\n")}`;
+}
+
+function normalizeDiagramLine(line: string): DiagramNormalizationResult {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return {
+      line: "",
+      wasDiagramLine: false,
+    };
+  }
+
+  if (
+    isMarkdownTableRow(trimmed) ||
+    isMarkdownTableSeparator(trimmed) ||
+    /^(#{1,6}\s+|[-*+]\s+|\d+\.\s+)/.test(trimmed)
+  ) {
+    return {
+      line,
+      wasDiagramLine: false,
+    };
+  }
+
+  if (ASCII_CONNECTOR_ONLY_PATTERN.test(trimmed)) {
+    return {
+      line: "",
+      wasDiagramLine: true,
+    };
+  }
+
+  if (!ASCII_DIAGRAM_SIGNAL_PATTERN.test(trimmed)) {
+    return {
+      line,
+      wasDiagramLine: false,
+    };
+  }
+
+  const segments = trimmed
+    .split(ASCII_DIAGRAM_SPLIT_PATTERN)
+    .map((segment) =>
+      segment
+        .replace(/^[|\\/<>^vV=._\-│┆┇┊┋╎╏─━┄┅┈┉┠┨┯┷┼┌┐└┘├┤┬┴╭╮╯╰\s]+/, "")
+        .replace(/[|\\/<>^vV=._\-│┆┇┊┋╎╏─━┄┅┈┉┠┨┯┷┼┌┐└┘├┤┬┴╭╮╯╰\s]+$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+
+  if (segments.length >= 3) {
+    return {
+      line: formatDiagramBranchLines(segments[0], segments.slice(1)),
+      wasDiagramLine: true,
+    };
+  }
+
+  if (segments.length === 2) {
+    return {
+      line: formatDiagramBranchLines(segments[0], [segments[1]]),
+      wasDiagramLine: true,
+    };
+  }
+
+  if (segments.length === 1) {
+    return {
+      line: cleanInlineMarkdown(segments[0]),
+      wasDiagramLine: true,
+    };
+  }
+
+  return {
+    line,
+    wasDiagramLine: true,
+  };
+}
+
+function cleanBrokenAsciiDiagrams(value: string) {
+  const normalizedLines: string[] = [];
+  let insideConvertedDiagramBlock = false;
+
+  value.split("\n").forEach((line) => {
+    const normalized = normalizeDiagramLine(line);
+
+    if (normalized.wasDiagramLine && normalized.line) {
+      if (!insideConvertedDiagramBlock) {
+        const previousNonEmptyLine = [...normalizedLines]
+          .reverse()
+          .find((entry) => entry.trim()) ?? "";
+
+        if (
+          previousNonEmptyLine.trim() &&
+          !DIAGRAM_SECTION_HEADING_PATTERN.test(previousNonEmptyLine.trim())
+        ) {
+          normalizedLines.push("");
+        }
+
+        if (!DIAGRAM_SECTION_HEADING_PATTERN.test(previousNonEmptyLine.trim())) {
+          normalizedLines.push("### Diagram / Flowchart");
+        }
+      }
+
+      normalizedLines.push(normalized.line);
+      insideConvertedDiagramBlock = true;
+      return;
+    }
+
+    if (!normalized.line && insideConvertedDiagramBlock) {
+      return;
+    }
+
+    if (normalized.line || normalizedLines[normalizedLines.length - 1]?.trim()) {
+      normalizedLines.push(normalized.line);
+    }
+    insideConvertedDiagramBlock = false;
+  });
+
+  return normalizedLines.join("\n");
+}
+
+export function cleanGeneratedText(value: string) {
+  return normalizeParagraphSpacing(
+    decodeHtmlEntities(
+      normalizeListFormatting(
+        cleanBrokenAsciiDiagrams(
+          normalizePipeSeparatedTables(
+            value
+              .replace(/\r\n/g, "\n")
+              .replace(HTML_BREAK_PATTERN, "\n")
+              .replace(HTML_HEADING_OPEN_PATTERN, (_, level: string) => `${"#".repeat(Number(level))} `)
+              .replace(HTML_HEADING_CLOSE_PATTERN, "\n\n")
+              .replace(HTML_LIST_OPEN_PATTERN, "\n")
+              .replace(HTML_LIST_CLOSE_PATTERN, "\n")
+              .replace(HTML_LIST_ITEM_OPEN_PATTERN, "- ")
+              .replace(HTML_LIST_ITEM_CLOSE_PATTERN, "\n")
+              .replace(HTML_TABLE_OPEN_PATTERN, "\n")
+              .replace(HTML_TABLE_CLOSE_PATTERN, "\n")
+              .replace(HTML_TABLE_ROW_OPEN_PATTERN, "")
+              .replace(HTML_TABLE_ROW_CLOSE_PATTERN, "\n")
+              .replace(HTML_TABLE_CELL_OPEN_PATTERN, "")
+              .replace(HTML_TABLE_CELL_CLOSE_PATTERN, " | ")
+              .replace(HTML_BLOCK_OPEN_PATTERN, "")
+              .replace(HTML_BLOCK_CLOSE_PATTERN, "\n\n")
+              .replace(HTML_TAG_PATTERN, "")
+              .replace(/[ \t]+\|/g, " |")
+              .replace(/\|[ \t]+\|/g, " | ")
+              .replace(/\|[ \t]*\n/g, "\n"),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 export function normalizeText(value: string) {
@@ -482,11 +1025,36 @@ function stripSimpleLatexMarkup(expression: string) {
   return normalized;
 }
 
-export function convertMarkdownMathToDocxText(markdown: string) {
+export function renderMathToHtml(expression: string, displayMode = false) {
+  try {
+    return katex.renderToString(normalizeLatexExpression(expression), {
+      throwOnError: false,
+      displayMode,
+    });
+  } catch {
+    return stripSimpleLatexMarkup(expression);
+  }
+}
+
+export function renderMath(text: string) {
+  if (!text) {
+    return "";
+  }
+
+  return replaceMathSegments(text, (segment) =>
+    renderMathToHtml(segment.value, segment.displayMode),
+  );
+}
+
+export function renderMathToPlainText(markdown: string) {
   return replaceMathSegments(markdown, (segment) => {
     const plainText = stripSimpleLatexMarkup(segment.value);
     return segment.displayMode ? `\n${plainText}\n` : plainText;
   });
+}
+
+export function convertMarkdownMathToDocxText(markdown: string) {
+  return renderMathToPlainText(markdown);
 }
 
 export function validateRenderedMath(markdown: string) {
@@ -513,11 +1081,15 @@ export function prepareExportMarkdown(
   markdown: string,
   metadata: ExportHeaderMetadata,
 ): PreparedExportMarkdown {
-  const cleaned = stripDuplicateHeaderLines(markdown, metadata);
+  const normalizedMarkdown = cleanGeneratedText(markdown);
+  const cleaned = stripDuplicateHeaderLines(normalizedMarkdown, metadata);
   const validation = validateRenderedMath(cleaned.content);
+  const exportTextContent = normalizeParagraphSpacing(renderMathToPlainText(cleaned.content));
 
   return {
     content: cleaned.content,
+    exportTextContent,
+    blocks: buildStructuredExportBlocks(exportTextContent),
     strippedHeaderLineCount: cleaned.strippedHeaderLineCount,
     invalidMathCount: validation.invalidMathCount,
     mathExpressionCount: validation.mathExpressionCount,

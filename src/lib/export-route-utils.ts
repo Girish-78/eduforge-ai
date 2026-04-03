@@ -87,6 +87,7 @@ export async function parseExportFilePayload(request: Request): Promise<ExportFi
   return {
     title: payload.title.trim(),
     content: payload.content.trim(),
+    exportTextContent: payload.exportTextContent?.trim() ?? "",
     toolType: payload.toolType,
     schoolName: payload.schoolName?.trim() ?? "",
     className: payload.className?.trim() ?? "",

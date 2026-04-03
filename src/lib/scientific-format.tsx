@@ -6,12 +6,11 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import katex from "katex";
 
-import { splitMathSegments } from "@/lib/export-content";
+import { renderMathToHtml, splitMathSegments } from "@/lib/export-content";
 
 const SCIENTIFIC_PATTERN =
-  /([A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([A-Za-z0-9/)\]]+)_\{([^}]+)\}|([A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/g;
+  /([\p{Script=Greek}A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)_\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([\p{Script=Greek}A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/gu;
 
 function renderChemicalFormula(token: string, keyPrefix: string) {
   const parts: ReactNode[] = [];
@@ -85,14 +84,11 @@ function formatScientificText(value: string) {
   return nodes;
 }
 
-function renderMath(value: string, displayMode: boolean, key: string) {
-  const html = katex.renderToString(value, {
-    displayMode,
-    throwOnError: false,
-  });
-
+function renderMathNode(value: string, displayMode: boolean, key: string) {
+  const html = renderMathToHtml(value, displayMode);
+  const ElementTag = displayMode ? "div" : "span";
   return (
-    <span
+    <ElementTag
       key={key}
       className={displayMode ? "katex-block" : "katex-inline"}
       dangerouslySetInnerHTML={{ __html: html }}
@@ -110,7 +106,7 @@ function formatScientificString(value: string) {
       return;
     }
 
-    nodes.push(renderMath(segment.value, segment.displayMode, `math-${index}-${segment.value}`));
+    nodes.push(renderMathNode(segment.value, segment.displayMode, `math-${index}-${segment.value}`));
   });
 
   return nodes;

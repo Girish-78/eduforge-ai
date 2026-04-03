@@ -405,6 +405,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     return {
       title: documentTitle,
       content: preparedExport.content,
+      exportTextContent: preparedExport.exportTextContent,
       toolType: tool.type,
       schoolName: values.schoolName,
       className: values.className,

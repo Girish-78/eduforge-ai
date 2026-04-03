@@ -30,6 +30,93 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.document-surface,
+#pdf-content {
+  width: 100%;
+  max-width: 794px;
+  margin: 0 auto;
+  font-family: "Times New Roman", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.65;
+  color: #0f172a;
+  overflow: visible;
+  max-height: none;
+}
+
+.document-surface > :first-child,
+#pdf-content > :first-child {
+  margin-top: 0;
+}
+
+.document-surface h1,
+.document-surface h2,
+.document-surface h3,
+#pdf-content h1,
+#pdf-content h2,
+#pdf-content h3 {
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.document-surface h1,
+#pdf-content h1 {
+  color: #0f172a;
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.document-surface h2,
+#pdf-content h2 {
+  color: #1e3a8a;
+  margin-top: 30px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  font-size: 1.45rem;
+  line-height: 1.25;
+  border-bottom: 1px solid #dbe5f1;
+}
+
+.document-surface h3,
+#pdf-content h3 {
+  color: #1e3a8a;
+  margin-top: 22px;
+  margin-bottom: 8px;
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+
+.document-surface p,
+#pdf-content p {
+  margin-bottom: 12px;
+}
+
+.document-surface ul,
+.document-surface ol,
+#pdf-content ul,
+#pdf-content ol {
+  padding-left: 24px;
+  margin-bottom: 14px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.document-surface li,
+#pdf-content li {
+  margin-bottom: 6px;
+  line-height: 1.65;
+}
+
+.document-surface .pdf-table-wrapper,
+#pdf-content .pdf-table-wrapper {
+  margin: 16px 0 18px;
+  overflow: visible;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
 h1,
 h2,
 h3,
@@ -115,16 +202,22 @@ h4 {
   bottom: -0.2em;
 }
 
-#pdf-content {
+.katex-inline {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: baseline;
+}
+
+.katex-block {
+  display: block;
   width: 100%;
-  max-width: 794px;
-  margin: 0 auto;
-  font-family: "Helvetica Neue", Arial, sans-serif;
-  font-size: 15px;
-  line-height: 1.6;
-  color: #0f172a;
-  overflow: visible;
-  max-height: none;
+  margin: 12px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-block .katex-display {
+  margin: 0;
 }
 
 #pdf-content .katex-display,
@@ -137,37 +230,10 @@ h4 {
   overflow-y: hidden;
 }
 
-#pdf-content h1,
-#pdf-content h2,
-#pdf-content h3 {
-  color: #1e3a8a;
-  margin-top: 16px;
-  margin-bottom: 8px;
-  break-after: avoid;
-  page-break-after: avoid;
-}
-
-#pdf-content p {
-  margin-bottom: 8px;
-}
-
-#pdf-content ul,
-#pdf-content ol {
-  padding-left: 20px;
-  margin-bottom: 10px;
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-#pdf-content li {
-  margin-bottom: 5px;
-}
-
 #pdf-content table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  margin-top: 10px;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -181,11 +247,21 @@ h4 {
 
 #pdf-content th,
 #pdf-content td {
-  border: 1px solid #ccc;
-  padding: 8px;
+  border: 1px solid #cbd5e1;
+  padding: 10px 12px;
   text-align: left;
   vertical-align: top;
   word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+#pdf-content thead {
+  background: #f8fafc;
+}
+
+#pdf-content th {
+  font-weight: 700;
+  color: #0f172a;
 }
 
 #pdf-content .pdf-table-wrapper,
@@ -211,11 +287,12 @@ h4 {
 @media print {
   @page {
     size: A4;
-    margin: 20mm;
+    margin: 0;
   }
 
   body.pdf-print-mode {
-    margin: 20mm;
+    margin: 0;
+    padding: 0;
     background: #ffffff;
   }
 
@@ -232,11 +309,36 @@ h4 {
     position: static;
     width: auto;
     max-width: none;
-    margin: 0 auto;
-    padding: 20px;
+    margin: 0;
+    padding: 0;
     box-sizing: border-box;
     background: #ffffff;
     box-shadow: none;
     border-radius: 0;
+  }
+
+  body.pdf-print-mode .print-container {
+    margin: 25mm 20mm 20mm 20mm;
+    overflow: visible;
+  }
+
+  body.pdf-print-mode .print-container .pdf-header,
+  body.pdf-print-mode .print-container .header {
+    margin-top: 10mm;
+  }
+
+  body.pdf-print-mode .print-container table,
+  body.pdf-print-mode .print-container .pdf-table-wrapper,
+  body.pdf-print-mode .print-container thead,
+  body.pdf-print-mode .print-container tbody,
+  body.pdf-print-mode .print-container tr,
+  body.pdf-print-mode .print-container td,
+  body.pdf-print-mode .print-container th {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body.pdf-print-mode .print-container thead {
+    display: table-header-group;
   }
 }

@@ -2,6 +2,11 @@ const MM_TO_PX = 96 / 25.4;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const PDF_MARGIN_MM = 20;
+const PRINT_MARGIN_TOP_MM = 25;
+const PRINT_MARGIN_RIGHT_MM = 20;
+const PRINT_MARGIN_BOTTOM_MM = 20;
+const PRINT_MARGIN_LEFT_MM = 20;
+const PRINT_HEADER_TOP_MM = 10;
 const EXPORT_SURFACE_PADDING_PX = 20;
 const PAGE_WIDTH_PX = Math.round((A4_WIDTH_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
 const PAGE_HEIGHT_PX = Math.round((A4_HEIGHT_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
@@ -46,9 +51,16 @@ const PDF_EXPORT_STYLES = `
     padding: ${EXPORT_SURFACE_PADDING_PX}px;
     background: #ffffff;
     color: #0f172a;
-    font-family: "Helvetica Neue", Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.55;
+    font-family: "Times New Roman", Georgia, serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .pdf-export-document .print-container {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    overflow: visible;
   }
 
   .pdf-export-document #pdf-content {
@@ -65,8 +77,8 @@ const PDF_EXPORT_STYLES = `
   }
 
   .pdf-export-document .pdf-header {
-    margin-bottom: 16px;
-    padding-bottom: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
     text-align: center;
     border-bottom: 1px solid #d7dee8;
   }
@@ -150,40 +162,41 @@ const PDF_EXPORT_STYLES = `
   }
 
   .pdf-export-document h1 {
-    margin: 0 0 10px;
-    font-size: 22px;
-    line-height: 1.25;
+    margin: 0 0 14px;
+    font-size: 26px;
+    line-height: 1.2;
+    color: #0f172a;
   }
 
   .pdf-export-document h2 {
-    margin: 18px 0 8px;
-    font-size: 18px;
-    line-height: 1.3;
-    padding-bottom: 4px;
+    margin: 24px 0 10px;
+    font-size: 21px;
+    line-height: 1.25;
+    padding-bottom: 6px;
     border-bottom: 1px solid #dbe5f1;
   }
 
   .pdf-export-document h3 {
-    margin: 14px 0 6px;
-    font-size: 15px;
+    margin: 18px 0 8px;
+    font-size: 17px;
     line-height: 1.3;
   }
 
   .pdf-export-document p {
-    margin: 0 0 8px;
+    margin: 0 0 12px;
   }
 
   .pdf-export-document ul,
   .pdf-export-document ol {
-    margin: 0 0 10px;
-    padding-left: 20px;
+    margin: 0 0 14px;
+    padding-left: 24px;
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
   .pdf-export-document li {
-    margin: 0 0 5px;
-    line-height: 1.55;
+    margin: 0 0 6px;
+    line-height: 1.65;
   }
 
   .pdf-export-document strong {
@@ -192,9 +205,10 @@ const PDF_EXPORT_STYLES = `
 
   .pdf-export-document .pdf-table-wrapper {
     width: 100%;
-    margin: 10px 0 12px;
+    margin: 16px 0 18px;
     overflow: visible !important;
     border: 1px solid #cbd5e1;
+    border-radius: 12px;
     background: #ffffff;
   }
 
@@ -204,17 +218,32 @@ const PDF_EXPORT_STYLES = `
     table-layout: fixed;
   }
 
+  .pdf-export-document thead {
+    display: table-header-group;
+  }
+
+  .pdf-export-document tfoot {
+    display: table-footer-group;
+  }
+
   .pdf-export-document th,
   .pdf-export-document td {
     border: 1px solid #cbd5e1;
-    padding: 7px 8px;
+    padding: 10px 12px;
     text-align: left;
     vertical-align: top;
     word-break: break-word;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
   }
 
   .pdf-export-document thead {
-    background: #eff6ff;
+    background: #f8fafc;
+  }
+
+  .pdf-export-document th {
+    font-weight: 700;
+    color: #0f172a;
   }
 
   .pdf-export-document pre,
@@ -244,7 +273,7 @@ const PDF_EXPORT_STYLES = `
   @media print {
     @page {
       size: A4;
-      margin: ${PDF_MARGIN_MM}mm;
+      margin: 0;
     }
 
     html,
@@ -256,6 +285,8 @@ const PDF_EXPORT_STYLES = `
 
     body.pdf-print-mode > .pdf-export-root {
       width: auto;
+      margin: 0;
+      padding: 0;
     }
 
     body.pdf-print-mode > .pdf-export-root > style {
@@ -265,6 +296,29 @@ const PDF_EXPORT_STYLES = `
     body.pdf-print-mode .pdf-export-document {
       width: auto;
       padding: 0;
+      overflow: visible;
+    }
+
+    body.pdf-print-mode .print-container {
+      margin: ${PRINT_MARGIN_TOP_MM}mm ${PRINT_MARGIN_RIGHT_MM}mm ${PRINT_MARGIN_BOTTOM_MM}mm ${PRINT_MARGIN_LEFT_MM}mm;
+      overflow: visible;
+      page-break-inside: auto;
+    }
+
+    body.pdf-print-mode .print-container .pdf-header,
+    body.pdf-print-mode .print-container .header {
+      margin-top: ${PRINT_HEADER_TOP_MM}mm;
+    }
+
+    body.pdf-print-mode .print-container table,
+    body.pdf-print-mode .print-container .pdf-table-wrapper,
+    body.pdf-print-mode .print-container thead,
+    body.pdf-print-mode .print-container tbody,
+    body.pdf-print-mode .print-container tr,
+    body.pdf-print-mode .print-container td,
+    body.pdf-print-mode .print-container th {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
   }
 `;
@@ -411,11 +465,14 @@ export async function buildPdfExportDocument({
   const root = createRenderRoot();
   const documentElement = document.createElement("div");
   documentElement.className = "pdf-export-document";
+  const printContainer = document.createElement("div");
+  printContainer.className = "print-container";
 
   const clone = source.cloneNode(true) as HTMLElement;
   normalizeExportNode(clone);
   updateHeaderLogos(clone, logoDataUrl);
-  documentElement.appendChild(clone);
+  printContainer.appendChild(clone);
+  documentElement.appendChild(printContainer);
   root.appendChild(documentElement);
 
   await waitForDocumentFonts();

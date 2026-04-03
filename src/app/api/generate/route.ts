@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { cleanGeneratedText } from "@/lib/export-content";
 import { getDb } from "@/lib/firebase-admin";
 import {
   generatePrompt,
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(finalPrompt);
     const response = await result.response;
-    const text = response.text().trim();
+    const text = cleanGeneratedText(response.text());
 
     if (!text) {
       return NextResponse.json(

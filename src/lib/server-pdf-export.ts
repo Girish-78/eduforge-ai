@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { jsPDF } from "jspdf";
 
 import {
+  buildStructuredExportBlocks,
   cleanInlineMarkdown,
-  convertMarkdownMathToDocxText,
   normalizeText,
+  prepareExportMarkdown,
 } from "@/lib/export-content";
 import type { ExportFilePayload } from "@/lib/export-types";
 
@@ -23,43 +24,6 @@ let fontCachePromise: Promise<{ regular: string; bold: string }> | null = null;
 type PdfState = {
   y: number;
 };
-
-function isMarkdownTableSeparator(line: string) {
-  return /^\|\s*[:\-| ]+\|?\s*$/.test(line.trim());
-}
-
-function isMarkdownTableRow(line: string) {
-  const trimmed = line.trim();
-  return trimmed.startsWith("|") && trimmed.endsWith("|");
-}
-
-function parseTableRow(line: string) {
-  return line
-    .trim()
-    .slice(1, -1)
-    .split("|")
-    .map((cell) => cleanInlineMarkdown(cell.trim()));
-}
-
-function isSpecialBlock(line: string, nextLine?: string) {
-  if (!line.trim()) {
-    return true;
-  }
-
-  if (/^(#{1,3})\s+.+$/.test(line)) {
-    return true;
-  }
-
-  if (/^\s*[-*+]\s+.+$/.test(line)) {
-    return true;
-  }
-
-  if (/^\s*\d+\.\s+.+$/.test(line)) {
-    return true;
-  }
-
-  return isMarkdownTableRow(line) && isMarkdownTableSeparator(nextLine ?? "");
-}
 
 async function loadPdfFonts() {
   if (!fontCachePromise) {
@@ -122,7 +86,7 @@ function addCenteredText(
   doc.setFontSize(options.size);
   doc.setTextColor(...(options.color ?? [15, 23, 42]));
   const lines = doc.splitTextToSize(text, CONTENT_WIDTH_MM);
-  const lineHeight = Math.max(5, options.size * 0.48);
+  const lineHeight = Math.max(5.4, options.size * 0.5);
   ensurePageSpace(doc, state, lines.length * lineHeight + (options.spacingAfter ?? 0));
   doc.text(lines, PAGE_MARGIN_MM + CONTENT_WIDTH_MM / 2, state.y, { align: "center" });
   state.y += lines.length * lineHeight + (options.spacingAfter ?? 0);
@@ -150,7 +114,7 @@ function addBlockText(
   doc.setFontSize(options.size);
   doc.setTextColor(...(options.color ?? [15, 23, 42]));
   const lines = doc.splitTextToSize(text, width);
-  const lineHeight = Math.max(4.8, options.size * 0.46);
+  const lineHeight = Math.max(5.2, options.size * 0.5);
   ensurePageSpace(doc, state, lines.length * lineHeight + (options.spacingAfter ?? 0));
   doc.text(lines, PAGE_MARGIN_MM + indentMm, state.y);
   state.y += lines.length * lineHeight + (options.spacingAfter ?? 0);
@@ -200,14 +164,14 @@ function addHeader(
 
   addCenteredText(doc, state, payload.schoolName ?? "", {
     bold: true,
-    size: 18,
-    spacingAfter: 3,
+    size: 18.5,
+    spacingAfter: 4,
   });
   addCenteredText(doc, state, classSubject, {
     bold: true,
-    size: 12,
+    size: 12.5,
     color: [71, 85, 105],
-    spacingAfter: 2,
+    spacingAfter: 3,
   });
   addCenteredText(
     doc,
@@ -215,9 +179,9 @@ function addHeader(
     payload.chapter ? `Chapter / Topic: ${payload.chapter}` : "",
     {
       bold: true,
-      size: 11,
+      size: 11.5,
       color: [71, 85, 105],
-      spacingAfter: payload.periods ? 2 : 4,
+      spacingAfter: payload.periods ? 3 : 5,
     },
   );
 
@@ -228,19 +192,24 @@ function addHeader(
       payload.periods ? `Total Periods: ${payload.periods}` : "",
       {
         bold: true,
-        size: 11,
+        size: 11.5,
         color: [71, 85, 105],
-        spacingAfter: 4,
+        spacingAfter: 5,
       },
     );
   }
 
-  if (!payload.schoolName && !classSubject && !payload.chapter && !(payload.toolType === "lesson_plan" && payload.periods)) {
+  if (
+    !payload.schoolName &&
+    !classSubject &&
+    !payload.chapter &&
+    !(payload.toolType === "lesson_plan" && payload.periods)
+  ) {
     addCenteredText(doc, state, payload.title, {
       bold: true,
-      size: 18,
+      size: 18.5,
       color: [30, 58, 138],
-      spacingAfter: 4,
+      spacingAfter: 5,
     });
   }
 
@@ -253,8 +222,8 @@ function renderTable(
   headerCells: string[],
   bodyRows: string[][],
 ) {
-  const rowPadding = 2;
-  const lineHeight = 4.5;
+  const rowPadding = 3.4;
+  const lineHeight = 5;
   const columnWidth = CONTENT_WIDTH_MM / Math.max(headerCells.length, 1);
 
   const renderRow = (
@@ -283,17 +252,26 @@ function renderTable(
     preparedCells.forEach((_, index) => {
       const x = PAGE_MARGIN_MM + index * columnWidth;
       if (options.isHeader) {
-        doc.setFillColor(239, 246, 255);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(203, 213, 225);
         doc.rect(x, state.y, columnWidth, rowHeight, "FD");
       } else {
+        doc.setDrawColor(203, 213, 225);
         doc.rect(x, state.y, columnWidth, rowHeight);
       }
 
       doc.setFont(FONT_FAMILY, options.isHeader ? "bold" : "normal");
-      doc.setFontSize(options.isHeader ? 10 : 9.5);
+      doc.setFontSize(options.isHeader ? 10.5 : 10);
       doc.setTextColor(15, 23, 42);
       const lines = cellLines[index];
-      doc.text(lines.length > 0 ? lines : ["-"], x + rowPadding, state.y + rowPadding + lineHeight - 1);
+      doc.text(
+        lines.length > 0 ? lines : ["-"],
+        x + rowPadding,
+        state.y + rowPadding + lineHeight - 1,
+        {
+          maxWidth: columnWidth - rowPadding * 2,
+        },
+      );
     });
 
     state.y += rowHeight;
@@ -304,6 +282,22 @@ function renderTable(
     renderRow(row, { repeatHeader: { headerCells, bodyRows } });
   });
   state.y += 4;
+}
+
+function getPreparedExportBlocks(payload: ExportFilePayload) {
+  if (payload.exportTextContent?.trim()) {
+    return buildStructuredExportBlocks(payload.exportTextContent);
+  }
+
+  return prepareExportMarkdown(payload.content, {
+    title: payload.title,
+    toolType: payload.toolType,
+    schoolName: payload.schoolName,
+    className: payload.className,
+    subject: payload.subject,
+    chapter: payload.chapter,
+    periods: payload.periods,
+  }).blocks;
 }
 
 export async function createPdfBuffer({
@@ -322,95 +316,47 @@ export async function createPdfBuffer({
 }) {
   const doc = await createPdfDocument();
   const state: PdfState = { y: PAGE_MARGIN_MM };
-  const lines = convertMarkdownMathToDocxText(payload.content).replace(/\r\n/g, "\n").split("\n");
-  let index = 0;
+  const blocks = getPreparedExportBlocks(payload);
 
   addHeader(doc, state, payload, logo);
 
-  while (index < lines.length) {
-    const rawLine = lines[index] ?? "";
-    const line = rawLine.trim();
-
-    if (!line) {
-      state.y += 2;
-      index += 1;
-      continue;
+  blocks.forEach((block) => {
+    if (block.type === "table") {
+      renderTable(doc, state, block.headerCells, block.bodyRows);
+      return;
     }
 
-    if (isMarkdownTableRow(line) && isMarkdownTableSeparator(lines[index + 1] ?? "")) {
-      const headerCells = parseTableRow(line);
-      const bodyRows: string[][] = [];
-      index += 2;
-
-      while (index < lines.length && isMarkdownTableRow(lines[index] ?? "")) {
-        bodyRows.push(parseTableRow(lines[index] ?? ""));
-        index += 1;
+    if (block.type === "heading") {
+      if (normalizeText(block.text) === normalizeText(payload.title)) {
+        return;
       }
 
-      renderTable(doc, state, headerCells, bodyRows);
-      continue;
-    }
-
-    const headingMatch = rawLine.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch) {
-      const cleanedHeading = cleanInlineMarkdown(headingMatch[2]);
-      const normalizedHeading = normalizeText(cleanedHeading);
-      if (normalizedHeading === normalizeText(payload.title)) {
-        index += 1;
-        continue;
-      }
-
-      const level = Math.min(headingMatch[1].length, 3);
-      addBlockText(doc, state, cleanedHeading, {
+      addBlockText(doc, state, block.text, {
         bold: true,
-        size: level === 1 ? 16 : level === 2 ? 14 : 12,
+        size: block.level === 1 ? 17 : block.level === 2 ? 15 : 13,
         color: [30, 58, 138],
-        spacingAfter: 3,
+        spacingAfter: 4,
       });
-      index += 1;
-      continue;
+      return;
     }
 
-    const unorderedMatch = rawLine.match(/^\s*[-*+]\s+(.+)$/);
-    if (unorderedMatch) {
-      addBlockText(doc, state, `• ${cleanInlineMarkdown(unorderedMatch[1])}`, {
-        size: 10.5,
-        indentMm: 2,
-        spacingAfter: 2,
+    if (block.type === "list") {
+      block.items.forEach((item, itemIndex) => {
+        const prefix = block.ordered ? `${itemIndex + 1}. ` : "\u2022 ";
+        addBlockText(doc, state, `${prefix}${item}`, {
+          size: 11,
+          indentMm: 2,
+          spacingAfter: 3,
+        });
       });
-      index += 1;
-      continue;
+      return;
     }
 
-    const orderedMatch = rawLine.match(/^\s*(\d+)\.\s+(.+)$/);
-    if (orderedMatch) {
-      addBlockText(doc, state, `${orderedMatch[1]}. ${cleanInlineMarkdown(orderedMatch[2])}`, {
-        size: 10.5,
-        indentMm: 2,
-        spacingAfter: 2,
-      });
-      index += 1;
-      continue;
-    }
-
-    const paragraphLines = [line];
-    index += 1;
-
-    while (index < lines.length) {
-      const nextLine = lines[index] ?? "";
-      if (isSpecialBlock(nextLine, lines[index + 1])) {
-        break;
-      }
-
-      paragraphLines.push(nextLine.trim());
-      index += 1;
-    }
-
-    addBlockText(doc, state, cleanInlineMarkdown(paragraphLines.join(" ")), {
-      size: 10.5,
-      spacingAfter: 3,
+    addBlockText(doc, state, cleanInlineMarkdown(block.text), {
+      size: 11,
+      spacingAfter: 4,
     });
-  }
+  });
 
   return Buffer.from(doc.output("arraybuffer"));
 }

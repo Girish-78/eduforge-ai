@@ -10,6 +10,7 @@ export interface ExportLogoPayload {
 export interface ExportFilePayload {
   title: string;
   content: string;
+  exportTextContent?: string;
   toolType: GenerateType;
   schoolName?: string;
   className?: string;
