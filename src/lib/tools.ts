@@ -73,8 +73,9 @@ const sharedFields = {
     name: "customInstructions",
     label: "Prompt Box",
     type: "textarea",
-    placeholder: "Add any custom instructions for the AI output.",
-    helperText: "Optional instructions override tone, format, depth, or question style.",
+    placeholder: "Add any custom instructions for layout, format, depth, style, or question pattern.",
+    helperText:
+      "Optional instructions are treated as highest-priority user guidance and override the default tool format.",
     rows: 5,
   },
 } as const satisfies Record<string, ToolFieldDefinition>;
@@ -294,19 +295,24 @@ export function buildToolPromptInput(
   values: Record<string, string>,
   attachments: ToolAttachmentSummary[],
 ) {
-  const lines = [
-    `Tool: ${tool.navLabel}`,
-    ...tool.fields
-      .map((field) => {
-        const value = values[field.name]?.trim() ?? "";
-        if (!value) {
-          return "";
-        }
+  const lines = [`Tool: ${tool.navLabel}`];
 
-        return `${field.label}: ${value}`;
-      })
-      .filter(Boolean),
-  ];
+  for (const field of tool.fields) {
+    const value = values[field.name]?.trim() ?? "";
+    if (!value) {
+      continue;
+    }
+
+    if (field.name === "customInstructions") {
+      lines.push(
+        "User Priority Instructions: Follow these custom instructions over the default tool format unless they conflict with the core quality rules.",
+      );
+      lines.push(value);
+      continue;
+    }
+
+    lines.push(`${field.label}: ${value}`);
+  }
 
   if (attachments.length > 0) {
     lines.push(
@@ -341,4 +347,3 @@ function formatFileSize(size: number) {
 
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
-

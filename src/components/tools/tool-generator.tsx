@@ -14,19 +14,18 @@ import {
   disabledButtonStateClassName,
   secondaryButtonClassName,
 } from "@/lib/button-styles";
-import { createDocxBlob } from "@/lib/docx-export";
 import { prepareExportMarkdown } from "@/lib/export-content";
 import {
   prepareLogoAsset,
   resolveFirebaseStorageDownloadUrl,
 } from "@/lib/export-logo";
+import type { ExportFilePayload } from "@/lib/export-types";
 import {
   getFirebaseClientApp,
   getFirebaseClientFirestore,
 } from "@/lib/firebase-client";
 import {
   buildPdfExportDocument,
-  pdfExportConfig,
   pdfExportPageSize,
   waitForDocumentFonts,
   waitForImages,
@@ -72,6 +71,10 @@ function wait(delay: number) {
   });
 }
 
+function getExportApiUrl(format: "pdf" | "docx") {
+  return `${window.location.origin}/api/export/${format}`;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -86,6 +89,24 @@ function summarizeFiles(files: File[]) {
     size: file.size,
     type: file.type,
   }));
+}
+
+async function getExportErrorMessage(response: Response) {
+  const contentType = response.headers.get("Content-Type") ?? "";
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          error?: string;
+        }
+      | null;
+
+    if (payload?.error?.trim()) {
+      return payload.error;
+    }
+  }
+
+  const responseText = await response.text().catch(() => "");
+  return responseText.trim() || "Export failed";
 }
 
 function preparePdfContentForExport(element: HTMLElement) {
@@ -355,6 +376,51 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     }
   }
 
+  async function createExportPayload(): Promise<ExportFilePayload> {
+    const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
+    if ((logoSource || logoUrl) && !logoAsset?.downloadUrl) {
+      throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
+    }
+
+    return {
+      title: documentTitle,
+      content: preparedExport.content,
+      toolType: tool.type,
+      schoolName: values.schoolName,
+      className: values.className,
+      subject: values.subject,
+      chapter: values.chapter,
+      periods: values.periods,
+      logo: logoAsset
+        ? {
+            downloadUrl: logoAsset.downloadUrl,
+            imageType: logoAsset.imageType,
+            width: logoAsset.width,
+            height: logoAsset.height,
+          }
+        : null,
+    };
+  }
+
+  async function downloadExportFile(format: "pdf" | "docx") {
+    const payload = await createExportPayload();
+    const response = await fetch(getExportApiUrl(format), {
+      method: "POST",
+      mode: "same-origin",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(await getExportErrorMessage(response));
+    }
+
+    return response.blob();
+  }
+
   async function handleDownloadPDF() {
     const exportValidationError = validatePreparedExport();
     if (exportValidationError) {
@@ -363,36 +429,11 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       return;
     }
 
-    let cleanup: (() => void) | null = null;
-
     try {
       setError("");
       setActiveExportAction("pdf");
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = html2pdfModule.default;
-      if (typeof html2pdf !== "function") {
-        throw new Error("PDF export library failed to load.");
-      }
-
-      const exportDocument = await createExportPages();
-      cleanup = exportDocument.cleanup;
-
-      await html2pdf()
-        .set({
-          ...pdfExportConfig,
-          filename: `${sanitizeFileName(documentTitle)}.pdf`,
-          pagebreak: {
-            mode: ["avoid-all", "css", "legacy"],
-          },
-          html2canvas: {
-            ...pdfExportConfig.html2canvas,
-            backgroundColor: "#ffffff",
-            logging: false,
-            windowWidth: pdfExportPageSize.width,
-          },
-        })
-        .from(exportDocument.documentElement)
-        .save();
+      const pdfBlob = await downloadExportFile("pdf");
+      saveAs(pdfBlob, `${sanitizeFileName(documentTitle)}.pdf`);
 
       toast.success("PDF downloaded");
     } catch (downloadError) {
@@ -401,7 +442,6 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       setError(message);
       toast.error(message);
     } finally {
-      cleanup?.();
       setActiveExportAction(null);
     }
   }
@@ -417,22 +457,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     try {
       setError("");
       setActiveExportAction("docx");
-      const logoAsset = await prepareLogoAsset(logoSource || logoUrl);
-      if ((logoSource || logoUrl) && !logoAsset?.dataUrl) {
-        throw new Error("School logo could not be loaded for export. Please re-upload it and try again.");
-      }
-
-      const docxBlob = await createDocxBlob({
-        title: documentTitle,
-        content: preparedExport.content,
-        toolType: tool.type,
-        schoolName: values.schoolName,
-        className: values.className,
-        subject: values.subject,
-        chapter: values.chapter,
-        periods: values.periods,
-        logo: logoAsset,
-      });
+      const docxBlob = await downloadExportFile("docx");
 
       saveAs(docxBlob, `${sanitizeFileName(documentTitle)}.docx`);
       toast.success("DOCX downloaded");

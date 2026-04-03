@@ -9,67 +9,105 @@ export const allowedGenerateTypes = [
 
 export type GenerateType = (typeof allowedGenerateTypes)[number];
 
+const coreOutputRules = [
+  "You are an expert CBSE educator and content designer.",
+  "Always generate structured, clean, printable content.",
+  "Never leave any requested or implied section empty.",
+  "If a section is required, fill it with concise, meaningful academic content.",
+  "Do not repeat the main title or header content again inside the body.",
+  "Use tables, bullet points, labeled steps, and simple text diagrams where useful.",
+  "Use correct academic symbols directly, such as sigma, mu, lambda, alpha, and beta in proper symbol form.",
+  "Never show raw LaTeX delimiters or raw dollar-sign math syntax in the final output.",
+  "Render mathematical ideas in clean readable text using proper symbols and standard school notation.",
+  "Keep the output professional, school-ready, exam-ready, well-spaced, and easy to scan.",
+  "Avoid placeholder text, filler sentences, and empty headings.",
+].join(" ");
+
 const markdownOutputRules = [
   "Output in STRICT Markdown only.",
-  "Never use LaTeX syntax like \\section, \\subsection, \\item, \\begin, \\end.",
+  "Never use LaTeX syntax like \\section, \\subsection, \\item, \\begin, or \\end.",
   "Use headings with ## and ### only.",
-  "Use bullet points with maximum 12 words per bullet.",
+  "Keep bullets concise and readable.",
   "Use Markdown tables when comparing or summarizing structured data.",
-  "Bold key academic terms and action words with **double asterisks**.",
-  "Keep writing clean, classroom-friendly, and easy to scan.",
+  "Use numbered steps for procedures and problem-solving sequences where relevant.",
+  "Use bold formatting for key academic terms and action words with **double asterisks**.",
   "Do not output code fences unless explicitly requested.",
+  "Keep spacing clean for printing and export.",
+].join(" ");
+
+const flexibilityRules = [
+  "Follow the default format for this tool unless the user gives custom instructions.",
+  "If the user gives custom instructions, prioritize the user's instructions over the default format, structure, tone, and depth.",
+  "Even when following custom instructions, still obey the core output rules and Markdown rules.",
+  "If user instructions conflict with a default section order, keep the user's structure.",
 ].join(" ");
 
 const templates: Record<GenerateType, (input: string) => string> = {
   lesson_plan: (input) =>
     [
-      `Create a detailed CBSE lesson plan for: ${input}.`,
-      "Include sections for objectives, prior knowledge, activities, assessment, differentiation, and homework.",
-      "Map objectives to Bloom's taxonomy where relevant.",
-      "Add competency-based tasks and at least 3 HOTS questions.",
-      "Use practical examples suitable for Indian classrooms.",
+      `Generate a professional CBSE lesson plan for: ${input}.`,
+      "Default format: one clean Markdown table with these exact columns: | Period | Topic/Subtopic | Learning Objectives | Pedagogy (5E Model) | Resources | Assessment | Competencies |",
+      "Use the 5E model within pedagogy: Engage, Explore, Explain, Elaborate, Evaluate.",
+      "Include Entry Ticket, HOTS, and Exit Ticket within the lesson plan in the most suitable rows or cells.",
+      "Do not leave any table cell blank.",
+      "Do not repeat the lesson title or header outside the table unless the user explicitly asks for it.",
+      "Map learning objectives and competencies clearly and keep the plan school-ready and printable.",
+      "If the user specifies weekly format, custom columns, or another structure, follow the user's format instead of the default table.",
     ].join(" "),
   worksheet: (input) =>
     [
       `Generate a CBSE-style worksheet for: ${input}.`,
+      "Default structure: ## Worksheet, ### MCQs, ### Fill in the Blanks, ### Assertion-Reason, ### Case-based Questions, ## Answer Key.",
+      "If the user provides a custom worksheet pattern or section sequence, follow the user's structure instead of the default pattern.",
       "Include conceptual, application-based, and numerical questions when relevant.",
-      "Group content by Bloom's taxonomy levels with clear labels.",
-      "Include competency-based prompts and at least 3 HOTS questions.",
-      "Add a short answer key section for teachers.",
+      "Keep the worksheet clear, exam-ready, and classroom printable.",
+      "Add a complete answer key at the end.",
+      "Use tables if they improve clarity for case-based material, options, or data interpretation.",
     ].join(" "),
   question_paper: (input) =>
     [
-      `Create a school question paper for: ${input}.`,
-      "Include section-wise marks and total marks summary.",
-      "Balance easy, medium, and hard questions clearly.",
-      "Cover objective, short-answer, and long-answer question formats.",
-      "Add concise answer key points for teachers at the end.",
+      `Generate a CBSE-style question paper for: ${input}.`,
+      "Default structure: one formal paper header, ## General Instructions, ### Section A - MCQ, ### Section B - Short Answer, ### Section C - Long Answer.",
+      "If the user specifies custom sections, follow the user's sections instead of the default structure.",
+      "Include a proper paper header with school name, class, subject, time, and total marks.",
+      "Show marks for each question clearly.",
+      "Keep spacing clean and layout professional.",
+      "Make the final output look like a printable exam paper.",
+      "Do not repeat the paper header again inside the body.",
     ].join(" "),
   cheatsheet: (input) =>
     [
-      `Generate a compact classroom cheatsheet for: ${input}.`,
-      "Prioritize formulas, key terms, definitions, and quick memory cues.",
-      "Include a summary table for fast revision.",
-      "Keep each bullet short and exam-focused.",
+      `Generate a high-quality revision cheatsheet for: ${input}.`,
+      "Default structure: ## Key Concepts, ## Definitions, ## Formulas, ## Diagrams, ## Summary Table, ## Common Mistakes, ## Exam Tips.",
+      "If the user provides a custom cheatsheet format, follow that instead of the default structure.",
+      "Keep the cheatsheet concise, revision-friendly, and highly scannable.",
+      "Use correct symbols directly, including sigma and mu where relevant.",
+      "Include simple text diagrams, flow arrows, labeled layouts, or mini process diagrams where needed.",
+      "Ensure the summary table is valid Markdown with a header row.",
+      "Do not repeat the title or school header inside the content body.",
     ].join(" "),
   notes: (input) =>
     [
-      `Generate clean, printable student notes for: ${input}.`,
-      "Return STRICT Markdown only.",
-      "Use this exact section order: ## Topic Title, ## Key Concepts, ## Step-by-Step Explanation, ## Important Terms, ## Revision Table, ## Quick Recap.",
+      `Generate structured revision notes for: ${input}.`,
+      "Default structure: ## Concept Explanation, ## Definitions, ## Examples, ## Formulas, ## Diagrams.",
+      "If the user provides custom note structure or formatting instructions, follow those instead of the default structure.",
       "Start every section with a ## heading.",
       "Add a blank line between sections.",
-      "Use bullet points with maximum 10 words per bullet.",
-      "Do not compress ideas into single lines or merged sentences.",
-      "Ensure the revision table uses valid Markdown with a header row.",
-      "Keep the layout PDF-friendly, readable, and classroom-focused.",
+      "Keep the content clear, readable, concise, and revision-friendly.",
+      "Use proper academic symbols directly where relevant.",
+      "Include simple text diagrams, labeled layouts, or flow diagrams where needed.",
+      "Do not repeat the title or school header inside the content body.",
     ].join(" "),
   practice_questions: (input) =>
     [
       `Generate practice questions for: ${input}.`,
-      "Include at least 12 questions with mixed difficulty.",
-      "Add short hints or expected answer points after each question.",
-      "Provide a final self-check table for progress tracking.",
+      "Default structure: ## Practice Questions, ### Section A: MCQ, ### Section B: Short Answer, ### Section C: Long Answer, ## Answers.",
+      "If the user modifies sections, difficulty, or question mix, follow the user's structure instead of the default structure.",
+      "Keep the paper exam-ready, clearly sectioned, and printable.",
+      "Include answers separately under the final ## Answers section.",
+      "Include numerical problems whenever the topic supports them.",
+      "Include at least 2 HOTS questions unless the user explicitly asks otherwise.",
+      "Use clean numbering and clear spacing so teachers and students can use it directly.",
     ].join(" "),
 };
 
@@ -86,6 +124,6 @@ export function generatePrompt({
 }) {
   const normalized = inputs.trim();
   const taskPrompt = templates[toolType](normalized);
-  return `${taskPrompt} ${markdownOutputRules}`;
-}
 
+  return [coreOutputRules, markdownOutputRules, flexibilityRules, taskPrompt].join(" ");
+}
