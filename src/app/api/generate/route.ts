@@ -18,6 +18,7 @@ interface GenerateBody {
 }
 
 export async function POST(request: Request) {
+  console.log("🔥 API CALLED");
   try {
     const session = await getServerSessionUser();
     const body = (await request.json()) as GenerateBody;
