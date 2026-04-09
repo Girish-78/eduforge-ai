@@ -1,7 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { cleanGeneratedText } from "@/lib/export-content";
 import { getDb } from "@/lib/firebase-admin";
 import {
   generatePrompt,
@@ -85,7 +84,9 @@ export async function POST(request: Request) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(finalPrompt);
     const response = await result.response;
-    const text = cleanGeneratedText(response.text());
+    console.log("Gemini raw response:", response);
+    const rawText = response.text();
+    const text = rawText;
 
     if (!text) {
       return NextResponse.json(
@@ -106,11 +107,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ output: text, usage });
   } catch (error) {
-    console.error("/api/generate error", error);
+    const details = error instanceof Error ? error.message : String(error);
+
+    console.error("GENERATE API ERROR:", error);
+
     return NextResponse.json(
       {
-        success: false,
-        error: "Failed to generate content. Please try again shortly.",
+        error: "Generation failed",
+        details,
       },
       { status: 500 },
     );
