@@ -272,6 +272,14 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
       return;
     }
 
+    if (nextFiles.length > 3) {
+      setError("You can upload up to 3 reference files.");
+      toast.error("You can upload up to 3 reference files.");
+      setFiles(nextFiles.slice(0, 3));
+      return;
+    }
+
+    setError("");
     setFiles(nextFiles);
   }
 

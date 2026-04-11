@@ -102,7 +102,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         placeholder: "Example: 2",
         required: true,
         min: 1,
-        max: 12,
+        max: 30,
       },
       {
         name: "duration",

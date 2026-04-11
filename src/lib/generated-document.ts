@@ -179,14 +179,22 @@ export const GENERATED_DOCUMENT_STYLE = `
 
   .eduforge-document__body table {
     width: 100%;
-    margin: 16px 0 20px;
-    border-collapse: collapse;
+    margin: 18px 0 24px;
+    border-collapse: separate;
+    border-spacing: 0;
     table-layout: fixed;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    font-size: 14px;
+    line-height: 1.45;
   }
 
   .eduforge-document__body thead {
     display: table-header-group;
-    background: #eef4ff;
+    background: #e8f0ff;
   }
 
   .eduforge-document__body tfoot {
@@ -195,17 +203,124 @@ export const GENERATED_DOCUMENT_STYLE = `
 
   .eduforge-document__body th,
   .eduforge-document__body td {
-    border: 1px solid #cbd5e1;
-    padding: 10px 12px;
+    border-right: 1px solid #d9e2ef;
+    border-bottom: 1px solid #d9e2ef;
+    padding: 10px 11px;
     text-align: left;
     vertical-align: top;
     word-break: break-word;
     overflow-wrap: anywhere;
+    background: #ffffff;
   }
 
   .eduforge-document__body th {
     font-weight: 700;
     color: #0f172a;
+    background: #e8f0ff;
+  }
+
+  .eduforge-document__body th:last-child,
+  .eduforge-document__body td:last-child {
+    border-right: 0;
+  }
+
+  .eduforge-document__body tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .eduforge-document__body tbody tr:nth-child(even) td {
+    background: #f8fbff;
+  }
+
+  .eduforge-document__body td > ul,
+  .eduforge-document__body td > ol,
+  .eduforge-document__body th > ul,
+  .eduforge-document__body th > ol {
+    margin: 0 0 0 16px;
+  }
+
+  .eduforge-document__body td p:last-child,
+  .eduforge-document__body th p:last-child,
+  .eduforge-document__body td ul:last-child,
+  .eduforge-document__body td ol:last-child {
+    margin-bottom: 0;
+  }
+
+  .eduforge-document__body table h1,
+  .eduforge-document__body table h2,
+  .eduforge-document__body table h3 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .eduforge-document__body .lesson-plan-table {
+    font-size: 13.25px;
+    line-height: 1.38;
+  }
+
+  .eduforge-document__body .lesson-plan-table thead tr:first-child th[colspan] {
+    background: linear-gradient(180deg, #eef4ff 0%, #dce9ff 100%);
+    padding: 14px 16px;
+    border-bottom: 2px solid #b7c9e6;
+  }
+
+  .eduforge-document__body .lesson-plan-table thead tr:first-child h2 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    color: #0f172a;
+  }
+
+  .eduforge-document__body .lesson-plan-table thead tr:first-child p {
+    margin: 0;
+    font-size: 12.5px;
+    color: #334155;
+    line-height: 1.45;
+  }
+
+  .eduforge-document__body .lesson-plan-table thead tr:last-child th {
+    padding: 10px 8px;
+    background: #d7e7ff;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(1),
+  .eduforge-document__body .lesson-plan-table td:nth-child(1) {
+    width: 7%;
+    text-align: center;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(2),
+  .eduforge-document__body .lesson-plan-table td:nth-child(2) {
+    width: 7%;
+    text-align: center;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(3),
+  .eduforge-document__body .lesson-plan-table td:nth-child(3) {
+    width: 16%;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(4),
+  .eduforge-document__body .lesson-plan-table td:nth-child(4) {
+    width: 18%;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(5),
+  .eduforge-document__body .lesson-plan-table td:nth-child(5) {
+    width: 24%;
+  }
+
+  .eduforge-document__body .lesson-plan-table th:nth-child(6),
+  .eduforge-document__body .lesson-plan-table td:nth-child(6),
+  .eduforge-document__body .lesson-plan-table th:nth-child(7),
+  .eduforge-document__body .lesson-plan-table td:nth-child(7),
+  .eduforge-document__body .lesson-plan-table th:nth-child(8),
+  .eduforge-document__body .lesson-plan-table td:nth-child(8) {
+    width: 9.3%;
   }
 
   .eduforge-document__body .formula-box,

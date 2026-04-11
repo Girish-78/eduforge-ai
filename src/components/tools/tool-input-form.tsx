@@ -38,11 +38,28 @@ export function ToolInputForm({
   generating,
 }: ToolInputFormProps) {
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    const nextFiles = Array.from(event.target.files ?? []).filter((file) => {
+    const selectedFiles = Array.from(event.target.files ?? []).filter((file) => {
       return fileTypes.has(file.type) && file.size <= TOOL_FILE_MAX_SIZE;
     });
 
-    onFileChange(nextFiles.slice(0, 3));
+    const mergedFiles = [...files];
+
+    selectedFiles.forEach((file) => {
+      const exists = mergedFiles.some(
+        (currentFile) =>
+          currentFile.name === file.name &&
+          currentFile.size === file.size &&
+          currentFile.type === file.type &&
+          currentFile.lastModified === file.lastModified,
+      );
+
+      if (!exists) {
+        mergedFiles.push(file);
+      }
+    });
+
+    onFileChange(mergedFiles.slice(0, 3));
+    event.target.value = "";
   }
 
   return (

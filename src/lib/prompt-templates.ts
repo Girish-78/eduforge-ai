@@ -51,12 +51,14 @@ const templates: Record<GenerateType, (input: string) => string> = {
   lesson_plan: (input) =>
     [
       `Generate a professional CBSE lesson plan for: ${input}.`,
-      "Default format: a clean HTML table with these exact columns: Period, Topic/Subtopic, Learning Objectives, Pedagogy (5E Model), Resources, Assessment, Competencies.",
+      'Default format: one clean HTML table with class="lesson-plan-table" and these exact columns: Week, Period, Topic/Subtopic, Learning Objectives, Pedagogy (5E Model), Resources, Assessment, Competencies.',
+      "Do not add a repeated lesson-plan title row, merged header row, or school metadata row inside the table. Start directly with the column header row.",
       "Use the 5E model within pedagogy: Engage, Explore, Explain, Elaborate, Evaluate.",
       "Include Entry Ticket, HOTS, and Exit Ticket within the lesson plan in the most suitable rows or cells.",
       "Do not leave any table cell blank.",
       "Do not repeat the lesson title or header outside the table unless the user explicitly asks for it.",
       "Map learning objectives and competencies clearly and keep the plan school-ready and printable.",
+      "Keep each table cell concise, cleanly structured, and print-friendly using short paragraphs or brief bullet lists where needed.",
       "If the user specifies weekly format, custom columns, or another structure, follow the user's format instead of the default table.",
     ].join(" "),
   worksheet: (input) =>
