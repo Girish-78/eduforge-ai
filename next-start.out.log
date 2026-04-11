@@ -5,24 +5,4 @@
 ▲ Next.js 16.2.1
 - Local:         http://localhost:3000
 - Network:       http://192.168.45.116:3000
-✓ Ready in 386ms
-PDF export called
-PDF export request body received {
-  title: 'Worksheet - Science - Light - Class 8',
-  toolType: 'worksheet',
-  contentLength: 74,
-  hasContent: true,
-  hasLogo: false
-}
-PDF export logo processed { hasLogo: false, logoBytes: 0 }
-PDF export buffer generated { bytes: 17064 }
-DOCX export called
-DOCX export request body received {
-  title: 'Worksheet - Science - Light - Class 8',
-  toolType: 'worksheet',
-  contentLength: 74,
-  hasContent: true,
-  hasLogo: false
-}
-DOCX export logo processed { hasLogo: false, logoBytes: 0 }
-DOCX export buffer generated { bytes: 8846 }
+✓ Ready in 315ms

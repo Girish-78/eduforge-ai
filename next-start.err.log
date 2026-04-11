@@ -1,1 +1,12 @@
+Auth route error Error: Credential implementation provided to initializeApp() via the "credential" property failed to fetch a valid Google OAuth2 access token with the following error: "request to https://oauth2.googleapis.com/token failed, reason: connect ECONNREFUSED 127.0.0.1:9".
+    at async u (C:\Users\GS959\Desktop\SaaS\saas-app\.next\server\chunks\[root-of-the-server]__0a-b6za._.js:1:1645)
+    at async u (C:\Users\GS959\Desktop\SaaS\saas-app\.next\server\chunks\[root-of-the-server]__0a-b6za._.js:1:7094)
+    at async l (C:\Users\GS959\Desktop\SaaS\saas-app\.next\server\chunks\[root-of-the-server]__0a-b6za._.js:1:8135)
+    at async Module.y [as handler] (C:\Users\GS959\Desktop\SaaS\saas-app\.next\server\chunks\[root-of-the-server]__0a-b6za._.js:1:9242) {
+  errorInfo: {
+    code: 'app/invalid-credential',
+    message: 'Credential implementation provided to initializeApp() via the "credential" property failed to fetch a valid Google OAuth2 access token with the following error: "request to https://oauth2.googleapis.com/token failed, reason: connect ECONNREFUSED 127.0.0.1:9".'
+  },
+  codePrefix: 'app'
+}
 ^C
