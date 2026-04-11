@@ -278,72 +278,35 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
     return "";
   }
 
-  async function onGenerate() {
-    setError("");
-    setOutput("");
-    setUsageWarning("");
+  const handleGenerate = async () => {
+    console.log("🚀 Generate button clicked");
 
-    const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
-      toast.error(validationError);
-      return;
-    }
-
-    setLoading(true);
     try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: tool.type,
-          title: documentTitle,
-          input: buildToolPromptInput(tool, values, summarizeFiles(files)),
-        }),
-      });
-
-      const payload = (await res.json()) as {
-        output?: string;
-        result?: string;
-        error?: string;
-        usage?: { plan?: "free" | "pro"; remaining?: number; limit?: number };
+      const data = {
+        input: "test input",
+        title: "test title",
+        type: "lesson-plan"
       };
 
-      if (!res.ok) {
-        const message = payload.error ?? "Generation failed.";
-        setError(message);
-        toast.error(message);
+      console.log("📦 Sending data:", data);
 
-        if (res.status === 401) {
-          router.replace("/login");
-        }
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(data)
+      });
 
-        if (res.status === 403) {
-          router.replace("/dashboard/tools");
-        }
+      console.log("📡 Response status:", res.status);
 
-        if (payload.usage?.plan === "free" && payload.usage.remaining === 0) {
-          setUsageWarning("Daily free limit reached. Upgrade to paid plans soon.");
-        }
-        return;
-      }
+      const result = await res.json();
+      console.log("✅ Result:", result);
 
-      setOutput(payload.output ?? payload.result ?? "");
-      toast.success("Content generated");
-
-      if (payload.usage?.plan === "free" && typeof payload.usage.remaining === "number") {
-        setUsageWarning(
-          `Free plan usage: ${payload.usage.remaining} of ${payload.usage.limit} generations remaining today.`,
-        );
-      }
-    } catch (generateError) {
-      console.error("ToolGenerator onGenerate error", generateError);
-      setError("Unable to reach generation service.");
-      toast.error("Unable to reach generation service.");
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error("❌ Frontend error:", err);
     }
-  }
+  };
 
   async function ensurePrintableContent() {
     const source = getPrintableSource();
@@ -545,7 +508,7 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void onGenerate();
+          void handleGenerate();
         }}
       >
         <ToolInputForm
