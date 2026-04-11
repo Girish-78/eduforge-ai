@@ -1,9 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import {
+  buildGeneratedDocumentFragment,
+  isLikelyHtml,
+  parseToolPromptMetadata,
+} from "@/lib/generated-document";
 
 interface SavedDocument {
   id: string;
@@ -88,6 +93,30 @@ export default function DocumentsPage() {
     void loadDocuments();
   }, [loadDocuments]);
 
+  const previewContent = useMemo(() => {
+    if (!selected) {
+      return "";
+    }
+
+    if (!isLikelyHtml(selected.output)) {
+      return selected.output;
+    }
+
+    const metadata = parseToolPromptMetadata(selected.input);
+
+    return buildGeneratedDocumentFragment(selected.output, {
+      title:
+        metadata.toolTitle?.trim() ||
+        selected.type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      schoolName: metadata.schoolName,
+      className: metadata.className,
+      subject: metadata.subject,
+      chapter: metadata.chapter,
+      periods: metadata.periods,
+      branding: "Eduforge AI",
+    });
+  }, [selected]);
+
   return (
     <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
       <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -158,7 +187,7 @@ export default function DocumentsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase text-slate-500">Output</p>
-              <MarkdownPreview content={selected.output} />
+              <MarkdownPreview content={previewContent} />
             </div>
           </div>
         ) : (

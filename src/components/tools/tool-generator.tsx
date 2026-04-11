@@ -6,7 +6,6 @@ import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { PDFHeader } from "@/components/tools/pdf-header";
 import { MarkdownPreview } from "@/components/tools/markdown-preview";
 import { ToolInputForm } from "@/components/tools/tool-input-form";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -14,18 +13,21 @@ import {
   disabledButtonStateClassName,
   secondaryButtonClassName,
 } from "@/lib/button-styles";
-import { prepareExportMarkdown } from "@/lib/export-content";
+import {
+  buildGeneratedDocumentFragment,
+  buildGeneratedDocumentHtml,
+} from "@/lib/generated-document";
 import {
   resolveFirebaseStorageDownloadUrl,
   toBase64,
 } from "@/lib/export-logo";
-import type { ExportFilePayload } from "@/lib/export-types";
 import {
   getFirebaseClientApp,
   getFirebaseClientFirestore,
 } from "@/lib/firebase-client";
 import {
   buildPdfExportDocument,
+  pdfExportConfig,
   pdfExportPageSize,
   waitForDocumentFonts,
   waitForImages,
@@ -85,10 +87,6 @@ function wait(delay: number) {
   });
 }
 
-function getExportApiUrl(format: "pdf" | "docx") {
-  return `${window.location.origin}/api/export/${format}`;
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -103,24 +101,6 @@ function summarizeFiles(files: File[]) {
     size: file.size,
     type: file.type,
   }));
-}
-
-async function getExportErrorMessage(response: Response) {
-  const contentType = response.headers.get("Content-Type") ?? "";
-  if (contentType.includes("application/json")) {
-    const payload = (await response.json().catch(() => null)) as
-      | {
-          error?: string;
-        }
-      | null;
-
-    if (payload?.error?.trim()) {
-      return payload.error;
-    }
-  }
-
-  const responseText = await response.text().catch(() => "");
-  return responseText.trim() || "Export failed";
 }
 
 function preparePdfContentForExport(element: HTMLElement) {
@@ -157,7 +137,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
   const [error, setError] = useState("");
   const [output, setOutput] = useState("");
   const [usageWarning, setUsageWarning] = useState("");
-  const [logoSource, setLogoSource] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoBase64, setLogoBase64] = useState("");
   const [activeExportAction, setActiveExportAction] = useState<ExportAction>(null);
@@ -165,25 +144,55 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
   const documentTitle = useMemo(() => {
     return getToolDocumentTitle(tool, values) || tool.navLabel;
   }, [tool, values]);
-  const preparedExport = useMemo(() => {
-    return prepareExportMarkdown(output, {
-      title: documentTitle,
-      toolType: tool.type,
+  const preparedDocumentFragment = useMemo(() => {
+    if (!output.trim()) {
+      return "";
+    }
+
+    return buildGeneratedDocumentFragment(output, {
+      title: tool.navLabel,
       schoolName: values.schoolName,
       className: values.className,
       subject: values.subject,
       chapter: values.chapter,
       periods: values.periods,
+      logoDataUrl: logoBase64 || null,
+      branding: "Eduforge AI",
     });
   }, [
-    documentTitle,
     output,
-    tool.type,
     values.chapter,
     values.className,
     values.periods,
     values.schoolName,
     values.subject,
+    logoBase64,
+    tool.navLabel,
+  ]);
+  const preparedDocumentHtml = useMemo(() => {
+    if (!output.trim()) {
+      return "";
+    }
+
+    return buildGeneratedDocumentHtml(output, {
+      title: tool.navLabel,
+      schoolName: values.schoolName,
+      className: values.className,
+      subject: values.subject,
+      chapter: values.chapter,
+      periods: values.periods,
+      logoDataUrl: logoBase64 || null,
+      branding: "Eduforge AI",
+    });
+  }, [
+    output,
+    values.chapter,
+    values.className,
+    values.periods,
+    values.schoolName,
+    values.subject,
+    logoBase64,
+    tool.navLabel,
   ]);
 
   const exportButtonsDisabled = loading || activeExportAction !== null;
@@ -211,7 +220,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
       setProfileLoading(true);
 
       if (!user) {
-        setLogoSource("");
         setLogoUrl("");
         setLogoBase64("");
         setProfileLoading(false);
@@ -225,7 +233,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
           (typeof data.logoPath === "string" && data.logoPath.trim()) ||
           ((data.logoUrl as string | undefined) ?? "");
 
-        setLogoSource(nextLogoSource);
         if (nextLogoSource) {
           try {
             const resolvedLogoUrl = await resolveFirebaseStorageDownloadUrl(nextLogoSource);
@@ -279,14 +286,8 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
   }
 
   function validatePreparedExport() {
-    if (!preparedExport.content.trim()) {
+    if (!preparedDocumentFragment.trim()) {
       return "Generate content first to export.";
-    }
-
-    if (preparedExport.invalidMathCount > 0) {
-      return preparedExport.invalidMathCount === 1
-        ? "1 equation could not be rendered. Please fix the math before exporting."
-        : `${preparedExport.invalidMathCount} equations could not be rendered. Please fix the math before exporting.`;
     }
 
     return "";
@@ -419,51 +420,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     }
   }
 
-  async function createExportPayload(): Promise<ExportFilePayload> {
-    const resolvedLogoUrl =
-      logoUrl ||
-      (await resolveFirebaseStorageDownloadUrl(logoSource || logoUrl).catch((logoResolveError) => {
-        console.error("ToolGenerator export logo resolve error", logoResolveError);
-        return null;
-      }));
-
-    return {
-      title: documentTitle,
-      content: preparedExport.content,
-      exportTextContent: preparedExport.exportTextContent,
-      toolType: tool.type,
-      schoolName: values.schoolName,
-      className: values.className,
-      subject: values.subject,
-      chapter: values.chapter,
-      periods: values.periods,
-      logo: resolvedLogoUrl
-        ? {
-            downloadUrl: resolvedLogoUrl,
-          }
-        : null,
-    };
-  }
-
-  async function downloadExportFile(format: "pdf" | "docx") {
-    const payload = await createExportPayload();
-    const response = await fetch(getExportApiUrl(format), {
-      method: "POST",
-      mode: "same-origin",
-      credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(await getExportErrorMessage(response));
-    }
-
-    return response.blob();
-  }
-
   async function handleDownloadPDF() {
     const exportValidationError = validatePreparedExport();
     if (exportValidationError) {
@@ -472,11 +428,25 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
       return;
     }
 
+    let cleanup: (() => void) | null = null;
+
     try {
       setError("");
       setActiveExportAction("pdf");
-      const pdfBlob = await downloadExportFile("pdf");
-      saveAs(pdfBlob, `${sanitizeFileName(documentTitle)}.pdf`);
+      const exportDocument = await createExportPages();
+      cleanup = exportDocument.cleanup;
+      const { default: html2pdf } = await import("html2pdf.js");
+
+      await html2pdf()
+        .set({
+          ...pdfExportConfig,
+          filename: `${sanitizeFileName(documentTitle)}.pdf`,
+          pagebreak: {
+            mode: ["css", "legacy"],
+          },
+        })
+        .from(exportDocument.documentElement)
+        .save();
 
       toast.success("PDF downloaded");
     } catch (downloadError) {
@@ -485,6 +455,7 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
       setError(message);
       toast.error(message);
     } finally {
+      cleanup?.();
       setActiveExportAction(null);
     }
   }
@@ -500,7 +471,27 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     try {
       setError("");
       setActiveExportAction("docx");
-      const docxBlob = await downloadExportFile("docx");
+      const { asBlob } = await import("html-docx-js-typescript");
+      const docxFile = await asBlob(preparedDocumentHtml, {
+        margins: {
+          top: 1440,
+          right: 1080,
+          bottom: 1440,
+          left: 1080,
+          header: 720,
+          footer: 720,
+        },
+      });
+      const docxBlob =
+        docxFile instanceof Blob
+          ? docxFile
+          : (() => {
+              const bytes = new Uint8Array(docxFile.byteLength);
+              bytes.set(docxFile);
+              return new Blob([bytes.buffer], {
+                type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              });
+            })();
 
       saveAs(docxBlob, `${sanitizeFileName(documentTitle)}.docx`);
       toast.success("DOCX downloaded");
@@ -609,35 +600,13 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
           </p>
         ) : null}
 
-        {preparedExport.invalidMathCount > 0 && output ? (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            {preparedExport.invalidMathCount === 1
-              ? "1 equation still has invalid LaTeX. Fix it before exporting."
-              : `${preparedExport.invalidMathCount} equations still have invalid LaTeX. Fix them before exporting.`}
-          </p>
-        ) : null}
-
         {loading ? (
           <div className="mt-4">
             <LoadingDots label="AI is drafting content" />
           </div>
         ) : output ? (
           <div className="mt-4 space-y-4">
-            <MarkdownPreview
-              content={preparedExport.content}
-              contentId="pdf-content"
-              header={
-                <PDFHeader
-                  toolType={tool.type}
-                  schoolName={values.schoolName}
-                  className={values.className}
-                  subject={values.subject}
-                  chapter={values.chapter}
-                  periods={values.periods}
-                  logoSrc={logoBase64}
-                />
-              }
-            />
+            <MarkdownPreview content={preparedDocumentFragment} contentId="pdf-content" />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"

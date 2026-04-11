@@ -76,6 +76,13 @@ const PDF_EXPORT_STYLES = `
     color: #0f172a !important;
   }
 
+  .pdf-export-document .eduforge-document__page {
+    width: auto !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
   .pdf-export-document .pdf-header {
     margin-bottom: 20px;
     padding-bottom: 16px;
