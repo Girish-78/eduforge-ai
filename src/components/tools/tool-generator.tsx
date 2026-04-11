@@ -44,6 +44,20 @@ interface ToolGeneratorProps {
 }
 
 type ExportAction = "pdf" | "print" | "docx" | null;
+type GenerateUsage = {
+  allowed: boolean;
+  count: number;
+  limit: number;
+  remaining: number;
+  plan: "free" | "pro";
+};
+
+type GenerateResponse = {
+  output?: string;
+  error?: string;
+  details?: string;
+  usage?: GenerateUsage;
+};
 
 function sanitizeFileName(value: string) {
   return (
@@ -132,7 +146,7 @@ function preparePdfContentForExport(element: HTMLElement) {
   };
 }
 
-export function ToolGenerator({ tool }: ToolGeneratorProps) {
+export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(tool.fields.map((field) => [field.name, ""])),
@@ -279,32 +293,80 @@ export function ToolGenerator({ tool }: ToolGeneratorProps) {
   }
 
   const handleGenerate = async () => {
-    console.log("🚀 Generate button clicked");
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setUsageWarning("");
 
     try {
-      const data = {
-        input: "test input",
-        title: "test title",
-        type: "lesson-plan"
-      };
-
-      console.log("📦 Sending data:", data);
-
-      const res = await fetch("/api/generate", {
+      const response = await fetch("/api/generate", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify({
+          type: tool.type,
+          title: documentTitle,
+          input: buildToolPromptInput(tool, values, summarizeFiles(files)),
+        }),
       });
 
-      console.log("📡 Response status:", res.status);
+      const result = (await response.json().catch(() => null)) as GenerateResponse | null;
+      const responseError =
+        result?.error?.trim() || result?.details?.trim() || "Unable to generate content.";
 
-      const result = await res.json();
-      console.log("✅ Result:", result);
+      if (!response.ok) {
+        if (response.status === 401) {
+          toast.error(responseError);
+          router.push("/login");
+          return;
+        }
 
-    } catch (err) {
-      console.error("❌ Frontend error:", err);
+        if (response.status === 403) {
+          toast.error(responseError);
+          router.push("/dashboard/tools");
+          return;
+        }
+
+        throw new Error(responseError);
+      }
+
+      const nextOutput = result?.output?.trim();
+      if (!nextOutput) {
+        throw new Error("No content was generated. Please try again.");
+      }
+
+      setOutput(nextOutput);
+
+      const usage = result?.usage;
+      if (usage?.plan === "free") {
+        const generationLabel = usage.remaining === 1 ? "generation" : "generations";
+        setUsageWarning(
+          usage.remaining > 0
+            ? `${usage.remaining} ${generationLabel} left today on your free plan.`
+            : "You have used all free generations available today.",
+        );
+      } else if (sessionUser.plan === "free") {
+        setUsageWarning("");
+      }
+
+      toast.success(`${tool.navLabel} generated successfully.`);
+    } catch (generateError) {
+      const message = getErrorMessage(
+        generateError,
+        "Unable to generate content. Please try again.",
+      );
+      console.error("Generate failed:", generateError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
   };
 
