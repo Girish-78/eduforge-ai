@@ -55,6 +55,9 @@ type GenerateUsage = {
 };
 
 type GenerateResponse = {
+  success?: boolean;
+  data?: string;
+  message?: string;
   output?: string;
   error?: string;
   details?: string;
@@ -328,7 +331,10 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
 
       const result = (await response.json().catch(() => null)) as GenerateResponse | null;
       const responseError =
-        result?.error?.trim() || result?.details?.trim() || "Unable to generate content.";
+        result?.message?.trim() ||
+        result?.error?.trim() ||
+        result?.details?.trim() ||
+        "Unable to generate content.";
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -346,7 +352,7 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
         throw new Error(responseError);
       }
 
-      const nextOutput = result?.output?.trim();
+      const nextOutput = result?.data?.trim() || result?.output?.trim();
       if (!nextOutput) {
         throw new Error("No content was generated. Please try again.");
       }
