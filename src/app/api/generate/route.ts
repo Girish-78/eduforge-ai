@@ -11,6 +11,24 @@ import { getServerSessionUser } from "@/lib/session";
 import { userCanAccessTool } from "@/lib/tools";
 import { consumeUsage } from "@/lib/usage";
 
+// --- MASTER CONFIGURATION ---
+
+/** * 1. FIX THE VERCEL TIMEOUT
+ * On Hobby tier, the default is 10s. This line extends it to 60s.
+ * This is crucial for 'exhaustive' AI generations.
+ */
+export const maxDuration = 60; 
+export const runtime = "nodejs"; // Required for Firebase-Admin SDK compatibility
+
+/**
+ * 2. USE THE LATEST 2026 FRONTIER MODEL
+ * 'gemini-flash-latest' automatically points to the most stable Gemini 3 Flash.
+ * We use the v1beta endpoint to enable 'Thinking' capabilities.
+ */
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+const GEMINI_TIMEOUT_MS = 55_000; // Leave 5s buffer for Vercel
+const RETRY_DELAY_MS = [1000, 3000]; // Delay before retry 1 and retry 2
+
 interface GenerateBody {
   type?: GenerateType;
   input?: string;
@@ -19,316 +37,143 @@ interface GenerateBody {
 
 interface GeminiApiResponse {
   candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
+    content?: { parts?: Array<{ text?: string }> };
     finishReason?: string;
   }>;
-  error?: {
-    code?: number;
-    message?: string;
-    status?: string;
-  };
-  promptFeedback?: {
-    blockReason?: string;
-  };
+  error?: { message?: string; status?: string };
 }
 
-export const runtime = "nodejs";
+// Helper: Sleep function
+const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent";
-const GEMINI_TIMEOUT_MS = 10_000;
-const GEMINI_RETRY_DELAYS_MS = [1_000, 2_000] as const;
+async function callGeminiWithRetry(apiKey: string, prompt: string, requestId: string) {
+  const maxAttempts = RETRY_DELAY_MS.length + 1;
 
-function wait(delayMs: number) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
-function getErrorDetails(error: unknown) {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    };
-  }
-
-  return {
-    name: "UnknownError",
-    message: String(error),
-  };
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
-}
-
-function isNetworkError(error: unknown) {
-  return error instanceof TypeError;
-}
-
-function extractGeminiText(payload: GeminiApiResponse) {
-  return (
-    payload.candidates
-      ?.flatMap((candidate) => candidate.content?.parts ?? [])
-      .map((part) => part.text ?? "")
-      .join("")
-      .trim() ?? ""
-  );
-}
-
-function buildGeminiBody(prompt: string) {
-  return JSON.stringify({
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-  });
-}
-
-function buildGeminiUrl(apiKey: string) {
-  const url = new URL(GEMINI_API_URL);
-  url.searchParams.set("key", apiKey);
-  return url.toString();
-}
-
-function jsonFailure(message: string, status: number) {
-  return NextResponse.json({ success: false, message }, { status });
-}
-
-async function callGeminiWithRetry({
-  apiKey,
-  prompt,
-  requestId,
-}: {
-  apiKey: string;
-  prompt: string;
-  requestId: string;
-}) {
-  const totalAttempts = GEMINI_RETRY_DELAYS_MS.length + 1;
-
-  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
     try {
-      console.info("[api/generate] Gemini request started", {
-        requestId,
-        attempt,
-        totalAttempts,
-      });
+      console.info(`[api/generate] [${requestId}] AI Request Attempt ${attempt}`);
 
-      const response = await fetch(buildGeminiUrl(apiKey), {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: buildGeminiBody(prompt),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 8192, // Increased for exhaustive physics lesson plans
+          }
+        }),
         signal: controller.signal,
         cache: "no-store",
       });
 
-      const rawBody = await response.text();
-
       if (!response.ok) {
-        const retryable = response.status >= 500;
-
-        console.error("[api/generate] Gemini HTTP error", {
-          requestId,
-          attempt,
-          status: response.status,
-          body: rawBody,
-        });
-
-        if (retryable && attempt < totalAttempts) {
-          const delayMs = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 0;
-
-          console.warn("[api/generate] Retrying Gemini request", {
-            requestId,
-            attempt,
-            nextAttempt: attempt + 1,
-            delayMs,
-            reason: `HTTP ${response.status}`,
-          });
-
-          await wait(delayMs);
+        const errJson = await response.json().catch(() => ({}));
+        console.error(`[api/generate] [${requestId}] Google API Error ${response.status}:`, errJson);
+        
+        // Retry only on 5xx (server) or 429 (rate limit)
+        if ((response.status >= 500 || response.status === 429) && attempt < maxAttempts) {
+          const delay = RETRY_DELAY_MS[attempt - 1];
+          console.warn(`[api/generate] [${requestId}] Retrying in ${delay}ms due to HTTP ${response.status}`);
+          await wait(delay);
           continue;
         }
-
-        throw new Error(`Gemini request failed with status ${response.status}`);
+        throw new Error(`AI service returned ${response.status}`);
       }
 
-      let payload: GeminiApiResponse;
+      const payload = (await response.json()) as GeminiApiResponse;
+      const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
 
-      try {
-        payload = JSON.parse(rawBody) as GeminiApiResponse;
-      } catch (parseError) {
-        console.error("[api/generate] Gemini response parse failed", {
-          requestId,
-          attempt,
-          body: rawBody,
-          error: getErrorDetails(parseError),
-        });
-        throw new Error("Gemini returned an invalid response payload");
-      }
-
-      if (payload.error?.message) {
-        throw new Error(payload.error.message);
-      }
-
-      const text = extractGeminiText(payload);
-      if (!text) {
-        const reason =
-          payload.promptFeedback?.blockReason ??
-          payload.candidates?.[0]?.finishReason ??
-          "empty_response";
-
-        throw new Error(`Gemini returned no text (${reason})`);
-      }
-
+      if (!text) throw new Error("Empty AI response");
       return text;
-    } catch (error) {
-      const retryable = (isAbortError(error) || isNetworkError(error)) && attempt < totalAttempts;
 
-      if (retryable) {
-        const delayMs = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 0;
-
-        console.warn("[api/generate] Retrying Gemini request", {
-          requestId,
-          attempt,
-          nextAttempt: attempt + 1,
-          delayMs,
-          reason: isAbortError(error) ? "timeout" : "network_error",
-          error: getErrorDetails(error),
-        });
-
-        await wait(delayMs);
+    } catch (error: any) {
+      const isTimeout = error.name === "AbortError";
+      console.error(`[api/generate] [${requestId}] Attempt ${attempt} failed: ${isTimeout ? 'Timeout' : error.message}`);
+      
+      if (attempt < maxAttempts) {
+        await wait(RETRY_DELAY_MS[attempt - 1] || 1000);
         continue;
       }
-
       throw error;
     } finally {
       clearTimeout(timeoutId);
     }
   }
-
-  throw new Error("Gemini request failed after exhausting retries");
+  throw new Error("Maximum retry attempts exhausted");
 }
 
 export async function POST(request: Request) {
   const requestId = randomUUID();
-
-  console.info("[api/generate] API start", { requestId });
+  console.info(`[api/generate] [${requestId}] API Start`);
 
   try {
-    console.info("[api/generate] Request received", {
-      requestId,
-      method: request.method,
-      url: request.url,
-    });
-
+    // 1. API Key Check
     const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) {
-      console.error("[api/generate] Missing GEMINI_API_KEY", { requestId });
-      return jsonFailure("AI service temporarily unavailable", 500);
-    }
+    if (!apiKey) return NextResponse.json({ success: false, message: "AI Configuration missing" }, { status: 500 });
 
+    // 2. Auth & Input Check
     const session = await getServerSessionUser();
+    if (!session) return NextResponse.json({ success: false, message: "Unauthorized: Please log in" }, { status: 401 });
 
-    let body: GenerateBody;
+    const body = (await request.json()) as GenerateBody;
+    const { type, input, title } = body;
 
-    try {
-      body = (await request.json()) as GenerateBody;
-    } catch (parseError) {
-      console.error("[api/generate] Invalid request body", {
-        requestId,
-        error: getErrorDetails(parseError),
-      });
-      return jsonFailure("Invalid request body.", 400);
+    if (!type || !isGenerateType(type) || !input) {
+      return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
 
-    const type = body.type;
-    const input = body.input?.trim();
-    const title = body.title?.trim();
-
-    console.info("[api/generate] Parsed request", {
-      requestId,
-      type,
-      titleLength: title?.length ?? 0,
-      inputLength: input?.length ?? 0,
-      user: session?.email ?? null,
-    });
-
-    if (!type || !isGenerateType(type)) {
-      return jsonFailure("Invalid type. Please use a supported tool type.", 400);
-    }
-
-    if (!input) {
-      return jsonFailure("Input text is required.", 400);
-    }
-
-    if (!session) {
-      return jsonFailure("Please login before generating content.", 401);
-    }
-
+    // 3. Permissions & Usage
     if (!userCanAccessTool(session.role, type)) {
-      return jsonFailure("This tool is not available for your role.", 403);
+      return NextResponse.json({ success: false, message: "Access denied for this tool" }, { status: 403 });
     }
 
     const usage = await consumeUsage(session.email);
     if (!usage.allowed) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Daily limit reached (${usage.limit} generations). Upgrade to a paid plan for higher limits.`,
-          usage,
-        },
-        { status: 429 },
-      );
+      return NextResponse.json({ 
+        success: false, 
+        message: "Daily limit reached. Try again tomorrow.", 
+        usage 
+      }, { status: 429 });
     }
 
+    // 4. Content Generation
     const finalPrompt = generatePrompt({ toolType: type, inputs: input });
-    const text = await callGeminiWithRetry({
-      apiKey,
-      prompt: finalPrompt,
-      requestId,
-    });
+    const aiText = await callGeminiWithRetry(apiKey, finalPrompt, requestId);
 
+    // 5. Background Save to Firebase
     try {
       const db = getDb();
       await db.collection("documents").add({
         userId: session.email,
         type,
-        title: title ?? "",
+        title: title || "Untitled Lesson Plan",
         input,
-        output: text,
+        output: aiText,
         timestamp: Timestamp.now(),
       });
-    } catch (persistError) {
-      console.error("[api/generate] Failed to persist generated document", {
-        requestId,
-        error: getErrorDetails(persistError),
-      });
+    } catch (dbErr) {
+      console.error(`[api/generate] [${requestId}] DB Persist Failed:`, dbErr);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: text,
-      usage,
-    });
-  } catch (error) {
-    console.error("[api/generate] Full error", {
-      requestId,
-      error: getErrorDetails(error),
-    });
+    return NextResponse.json({ success: true, data: aiText, usage });
 
-    return jsonFailure("AI service temporarily unavailable", 503);
+  } catch (error: any) {
+    console.error(`[api/generate] [${requestId}] Final Fatal Error:`, error.message);
+    
+    // Safety Fallback: Return 503 instead of crashing
+    return NextResponse.json({ 
+      success: false, 
+      message: "AI service is currently busy. Please try a shorter request." 
+    }, { status: 503 });
   }
+}
+
+/** * Separate Health Route check (Optional but recommended)
+ */
+export async function GET() {
+  return NextResponse.json({ status: "ok", engine: "Gemini 3 Flash", timeout: "60s" });
 }
