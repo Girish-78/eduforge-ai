@@ -1,5 +1,11 @@
 import admin from "firebase-admin";
 
+type FirebaseServiceAccountPayload = {
+  client_email: string;
+  private_key: string;
+  project_id: string;
+};
+
 function normalizePrivateKey(value: string) {
   const trimmed = value.trim();
   const unquoted =
@@ -29,19 +35,49 @@ function getRequiredEnv(name: string) {
   return value.trim();
 }
 
+function isFirebaseServiceAccountPayload(
+  value: unknown,
+): value is FirebaseServiceAccountPayload {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { project_id?: unknown }).project_id === "string" &&
+    typeof (value as { client_email?: unknown }).client_email === "string" &&
+    typeof (value as { private_key?: unknown }).private_key === "string"
+  );
+}
+
 function getFirebaseConfig(): admin.ServiceAccount & { storageBucket?: string } {
-  const projectId = getRequiredEnv("FIREBASE_PROJECT_ID");
-  const clientEmail = getRequiredEnv("FIREBASE_CLIENT_EMAIL");
   const privateKeyBase64 = process.env.FIREBASE_PRIVATE_KEY_B64?.trim();
-  const privateKeySource = privateKeyBase64
-    ? Buffer.from(privateKeyBase64, "base64").toString("utf8")
-    : getRequiredEnv("FIREBASE_PRIVATE_KEY");
+  let projectId = process.env.FIREBASE_PROJECT_ID?.trim();
+  let clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  let privateKeySource: string | undefined;
+
+  if (privateKeyBase64) {
+    const decodedPrivateKey = Buffer.from(privateKeyBase64, "base64").toString("utf8").trim();
+
+    try {
+      const parsedValue: unknown = JSON.parse(decodedPrivateKey);
+      if (isFirebaseServiceAccountPayload(parsedValue)) {
+        projectId = parsedValue.project_id.trim();
+        clientEmail = parsedValue.client_email.trim();
+        privateKeySource = parsedValue.private_key;
+      } else {
+        privateKeySource = decodedPrivateKey;
+      }
+    } catch {
+      privateKeySource = decodedPrivateKey;
+    }
+  } else {
+    privateKeySource = getRequiredEnv("FIREBASE_PRIVATE_KEY");
+  }
+
   const privateKey = normalizePrivateKey(privateKeySource);
   const storageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
 
   return {
-    projectId,
-    clientEmail,
+    projectId: projectId || getRequiredEnv("FIREBASE_PROJECT_ID"),
+    clientEmail: clientEmail || getRequiredEnv("FIREBASE_CLIENT_EMAIL"),
     privateKey,
     storageBucket,
   };

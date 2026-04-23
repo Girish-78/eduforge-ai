@@ -46,6 +46,14 @@ interface GeminiApiResponse {
 // Helper: Sleep function
 const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 async function callGeminiWithRetry(apiKey: string, prompt: string, requestId: string) {
   const maxAttempts = RETRY_DELAY_MS.length + 1;
 
@@ -90,9 +98,13 @@ async function callGeminiWithRetry(apiKey: string, prompt: string, requestId: st
       if (!text) throw new Error("Empty AI response");
       return text;
 
-    } catch (error: any) {
-      const isTimeout = error.name === "AbortError";
-      console.error(`[api/generate] [${requestId}] Attempt ${attempt} failed: ${isTimeout ? 'Timeout' : error.message}`);
+    } catch (error: unknown) {
+      const isTimeout = isAbortError(error);
+      console.error(
+        `[api/generate] [${requestId}] Attempt ${attempt} failed: ${
+          isTimeout ? "Timeout" : getErrorMessage(error)
+        }`,
+      );
       
       if (attempt < maxAttempts) {
         await wait(RETRY_DELAY_MS[attempt - 1] || 1000);
@@ -161,8 +173,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, data: aiText, usage });
 
-  } catch (error: any) {
-    console.error(`[api/generate] [${requestId}] Final Fatal Error:`, error.message);
+  } catch (error: unknown) {
+    console.error(`[api/generate] [${requestId}] Final Fatal Error:`, getErrorMessage(error));
     
     // Safety Fallback: Return 503 instead of crashing
     return NextResponse.json({ 
