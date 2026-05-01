@@ -15,8 +15,8 @@ import {
 } from "@/lib/button-styles";
 import {
   buildGeneratedDocumentFragment,
-  buildGeneratedDocumentHtml,
 } from "@/lib/generated-document";
+import { hasRichVisualContent, prepareExportMarkdown } from "@/lib/export-content";
 import {
   resolveFirebaseStorageDownloadUrl,
   toBase64,
@@ -32,6 +32,7 @@ import {
   waitForDocumentFonts,
   waitForImages,
 } from "@/lib/pdf-export";
+import type { ExportFilePayload } from "@/lib/export-types";
 import type { SessionUser } from "@/lib/session";
 import {
   buildToolPromptInput,
@@ -154,6 +155,7 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
 
     return buildGeneratedDocumentFragment(output, {
       title: tool.navLabel,
+      toolType: tool.type,
       schoolName: values.schoolName,
       className: values.className,
       subject: values.subject,
@@ -171,32 +173,35 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     values.subject,
     logoBase64,
     tool.navLabel,
+    tool.type,
   ]);
-  const preparedDocumentHtml = useMemo(() => {
+  const preparedExportContent = useMemo(() => {
     if (!output.trim()) {
-      return "";
+      return null;
     }
 
-    return buildGeneratedDocumentHtml(output, {
-      title: tool.navLabel,
+    return prepareExportMarkdown(output, {
+      title: documentTitle,
+      toolType: tool.type,
       schoolName: values.schoolName,
       className: values.className,
       subject: values.subject,
       chapter: values.chapter,
       periods: values.periods,
-      logoDataUrl: logoBase64 || null,
-      branding: "Eduforge AI",
     });
   }, [
+    documentTitle,
     output,
+    tool.type,
     values.chapter,
     values.className,
     values.periods,
     values.schoolName,
     values.subject,
-    logoBase64,
-    tool.navLabel,
   ]);
+  const shouldUseBrowserPdfExport = useMemo(() => {
+    return output.trim() ? hasRichVisualContent(output) : false;
+  }, [output]);
 
   const exportButtonsDisabled = loading || activeExportAction !== null;
 
@@ -297,11 +302,55 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
   }
 
   function validatePreparedExport() {
-    if (!preparedDocumentFragment.trim()) {
+    if (!preparedDocumentFragment.trim() || !preparedExportContent?.content.trim()) {
       return "Generate content first to export.";
     }
 
     return "";
+  }
+
+  function buildExportPayload(): ExportFilePayload {
+    if (!preparedExportContent) {
+      throw new Error("Generate content first to export.");
+    }
+
+    return {
+      title: documentTitle,
+      content: output,
+      exportTextContent: preparedExportContent.exportTextContent,
+      toolType: tool.type,
+      schoolName: values.schoolName,
+      className: values.className,
+      subject: values.subject,
+      chapter: values.chapter,
+      periods: values.periods,
+      logo: logoUrl
+        ? {
+            downloadUrl: logoUrl,
+          }
+        : null,
+    };
+  }
+
+  async function downloadServerExport(format: "pdf" | "docx") {
+    const payload = buildExportPayload();
+    const response = await fetch(`/api/export/${format}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorPayload = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      throw new Error(errorPayload?.error?.trim() || `Unable to export ${format.toUpperCase()}.`);
+    }
+
+    const blob = await response.blob();
+    saveAs(blob, `${sanitizeFileName(documentTitle)}.${format}`);
   }
 
   const handleGenerate = async () => {
@@ -447,20 +496,52 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     try {
       setError("");
       setActiveExportAction("pdf");
+
+      if (!shouldUseBrowserPdfExport) {
+        await downloadServerExport("pdf");
+        toast.success("PDF downloaded");
+        return;
+      }
+
       const exportDocument = await createExportPages();
       cleanup = exportDocument.cleanup;
       const { default: html2pdf } = await import("html2pdf.js");
-
-      await html2pdf()
+      const worker = html2pdf()
         .set({
           ...pdfExportConfig,
           filename: `${sanitizeFileName(documentTitle)}.pdf`,
           pagebreak: {
             mode: ["css", "legacy"],
+            avoid: [
+              "tr",
+              ".formula-box",
+              ".summary-box",
+              ".instructions-box",
+              ".case-box",
+              ".worksheet-section",
+              ".exam-section",
+              ".mindmap-box",
+            ],
           },
         })
         .from(exportDocument.documentElement)
-        .save();
+        .toPdf();
+
+      await worker.get("pdf", (pdf) => {
+        const totalPages = pdf.internal.getNumberOfPages();
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+
+        for (let pageIndex = 1; pageIndex <= totalPages; pageIndex += 1) {
+          pdf.setPage(pageIndex);
+          pdf.setFontSize(9);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text(`Page ${pageIndex} of ${totalPages}`, pageWidth / 2, pageHeight - 6, {
+            align: "center",
+          });
+        }
+      });
+      await worker.save();
 
       toast.success("PDF downloaded");
     } catch (downloadError) {
@@ -485,29 +566,7 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     try {
       setError("");
       setActiveExportAction("docx");
-      const { asBlob } = await import("html-docx-js-typescript");
-      const docxFile = await asBlob(preparedDocumentHtml, {
-        margins: {
-          top: 1440,
-          right: 1080,
-          bottom: 1440,
-          left: 1080,
-          header: 720,
-          footer: 720,
-        },
-      });
-      const docxBlob =
-        docxFile instanceof Blob
-          ? docxFile
-          : (() => {
-              const bytes = new Uint8Array(docxFile.byteLength);
-              bytes.set(docxFile);
-              return new Blob([bytes.buffer], {
-                type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-              });
-            })();
-
-      saveAs(docxBlob, `${sanitizeFileName(documentTitle)}.docx`);
+      await downloadServerExport("docx");
       toast.success("DOCX downloaded");
     } catch (docxError) {
       const message = getErrorMessage(docxError, "Unable to export DOCX. Please try again.");

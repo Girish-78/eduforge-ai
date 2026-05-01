@@ -19,27 +19,7 @@ export function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    console.log("PDF export called");
-    const requestUrl = new URL(request.url);
-    if (requestUrl.searchParams.get("debug") === "test") {
-      console.log("PDF export debug test response returned");
-      return new Response("test pdf", {
-        status: 200,
-        headers: createAttachmentHeaders(request, {
-          contentType: "application/pdf",
-          fileName: "test-output.pdf",
-        }),
-      });
-    }
-
     const payload = await parseExportFilePayload(request);
-    console.log("PDF export request body received", {
-      title: payload.title,
-      toolType: payload.toolType,
-      contentLength: payload.content.length,
-      hasContent: Boolean(payload.content),
-      hasLogo: Boolean(payload.logo?.downloadUrl),
-    });
 
     if (!payload.content?.trim()) {
       throw new Error("PDF export content is undefined or empty.");
@@ -53,17 +33,10 @@ export async function POST(request: Request) {
         console.error("PDF export logo fallback applied", logoError);
       }
     }
-    console.log("PDF export logo processed", {
-      hasLogo: Boolean(logoAsset),
-      logoBytes: logoAsset?.buffer.length ?? 0,
-    });
 
     const fileBuffer = await createPdfBuffer({
       payload,
       logo: logoAsset?.pdfLogo ?? null,
-    });
-    console.log("PDF export buffer generated", {
-      bytes: fileBuffer.length,
     });
 
     return new Response(fileBuffer, {

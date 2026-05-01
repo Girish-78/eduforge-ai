@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { jsPDF } from "jspdf";
 
 import {
-  buildStructuredExportBlocks,
   cleanInlineMarkdown,
+  getPreferredTableColumnPercentages,
   normalizeText,
   prepareExportMarkdown,
 } from "@/lib/export-content";
@@ -16,6 +16,7 @@ const FONT_BOLD_FILE = "KaTeX_Main-Bold.ttf";
 const FONT_FAMILY = "KaTeXMain";
 const PAGE_MARGIN_MM = 20;
 const CONTENT_WIDTH_MM = 210 - PAGE_MARGIN_MM * 2;
+const FOOTER_RESERVE_MM = 10;
 const MAX_LOGO_WIDTH_MM = 40;
 const MAX_LOGO_HEIGHT_MM = 16;
 
@@ -59,7 +60,7 @@ async function createPdfDocument() {
 
 function ensurePageSpace(doc: jsPDF, state: PdfState, requiredHeight: number) {
   const pageHeight = doc.internal.pageSize.getHeight();
-  if (state.y + requiredHeight <= pageHeight - PAGE_MARGIN_MM) {
+  if (state.y + requiredHeight <= pageHeight - PAGE_MARGIN_MM - FOOTER_RESERVE_MM) {
     return;
   }
 
@@ -125,6 +126,27 @@ function drawDivider(doc: jsPDF, state: PdfState) {
   doc.setDrawColor(215, 222, 232);
   doc.line(PAGE_MARGIN_MM, state.y, PAGE_MARGIN_MM + CONTENT_WIDTH_MM, state.y);
   state.y += 6;
+}
+
+function addPageFooters(doc: jsPDF) {
+  const totalPages = doc.getNumberOfPages();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+    doc.setPage(pageNumber);
+    doc.setDrawColor(215, 222, 232);
+    doc.line(PAGE_MARGIN_MM, pageHeight - 10, PAGE_MARGIN_MM + CONTENT_WIDTH_MM, pageHeight - 10);
+    doc.setFont(FONT_FAMILY, "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Eduforge AI", PAGE_MARGIN_MM, pageHeight - 5.2);
+    doc.text(
+      `Page ${pageNumber} of ${totalPages}`,
+      PAGE_MARGIN_MM + CONTENT_WIDTH_MM,
+      pageHeight - 5.2,
+      { align: "right" },
+    );
+  }
 }
 
 function addHeader(
@@ -223,8 +245,14 @@ function renderTable(
   bodyRows: string[][],
 ) {
   const rowPadding = 3.4;
-  const lineHeight = 5;
-  const columnWidth = CONTENT_WIDTH_MM / Math.max(headerCells.length, 1);
+  const isDenseTable = headerCells.length >= 6;
+  const lineHeight = isDenseTable ? 4.5 : 5;
+  const columnPercentages =
+    getPreferredTableColumnPercentages(headerCells) ??
+    Array.from({ length: Math.max(headerCells.length, 1) }, () => 100 / Math.max(headerCells.length, 1));
+  const columnWidths = columnPercentages.map(
+    (percentage) => (CONTENT_WIDTH_MM * percentage) / 100,
+  );
 
   const renderRow = (
     cells: string[],
@@ -234,8 +262,11 @@ function renderTable(
     } = {},
   ) => {
     const preparedCells = cells.map((cell) => cleanInlineMarkdown(cell));
-    const cellLines = preparedCells.map((cell) =>
-      doc.splitTextToSize(cell || "-", Math.max(columnWidth - rowPadding * 2, 8)),
+    const cellLines = preparedCells.map((cell, index) =>
+      doc.splitTextToSize(
+        cell || "-",
+        Math.max((columnWidths[index] ?? columnWidths[0] ?? CONTENT_WIDTH_MM) - rowPadding * 2, 8),
+      ),
     );
     const rowHeight =
       Math.max(...cellLines.map((lines) => Math.max(lines.length, 1)), 1) * lineHeight +
@@ -250,18 +281,23 @@ function renderTable(
     }
 
     preparedCells.forEach((_, index) => {
-      const x = PAGE_MARGIN_MM + index * columnWidth;
+      const x =
+        PAGE_MARGIN_MM +
+        columnWidths.slice(0, index).reduce((total, width) => total + width, 0);
+      const width = columnWidths[index] ?? columnWidths[columnWidths.length - 1] ?? CONTENT_WIDTH_MM;
       if (options.isHeader) {
         doc.setFillColor(248, 250, 252);
         doc.setDrawColor(203, 213, 225);
-        doc.rect(x, state.y, columnWidth, rowHeight, "FD");
+        doc.rect(x, state.y, width, rowHeight, "FD");
       } else {
         doc.setDrawColor(203, 213, 225);
-        doc.rect(x, state.y, columnWidth, rowHeight);
+        doc.rect(x, state.y, width, rowHeight);
       }
 
       doc.setFont(FONT_FAMILY, options.isHeader ? "bold" : "normal");
-      doc.setFontSize(options.isHeader ? 10.5 : 10);
+      doc.setFontSize(
+        options.isHeader ? (isDenseTable ? 9.2 : 10.5) : isDenseTable ? 8.7 : 10,
+      );
       doc.setTextColor(15, 23, 42);
       const lines = cellLines[index];
       doc.text(
@@ -269,7 +305,7 @@ function renderTable(
         x + rowPadding,
         state.y + rowPadding + lineHeight - 1,
         {
-          maxWidth: columnWidth - rowPadding * 2,
+          maxWidth: width - rowPadding * 2,
         },
       );
     });
@@ -285,10 +321,6 @@ function renderTable(
 }
 
 function getPreparedExportBlocks(payload: ExportFilePayload) {
-  if (payload.exportTextContent?.trim()) {
-    return buildStructuredExportBlocks(payload.exportTextContent);
-  }
-
   return prepareExportMarkdown(payload.content, {
     title: payload.title,
     toolType: payload.toolType,
@@ -326,6 +358,16 @@ export async function createPdfBuffer({
       return;
     }
 
+    if (block.type === "visual") {
+      const visualLabel = block.asset.caption || block.asset.altText || "Visual";
+      addBlockText(doc, state, `[Visual retained in preview/print: ${visualLabel}]`, {
+        size: 10.5,
+        color: [71, 85, 105],
+        spacingAfter: 4,
+      });
+      return;
+    }
+
     if (block.type === "heading") {
       if (normalizeText(block.text) === normalizeText(payload.title)) {
         return;
@@ -357,6 +399,8 @@ export async function createPdfBuffer({
       spacingAfter: 4,
     });
   });
+
+  addPageFooters(doc);
 
   return Buffer.from(doc.output("arraybuffer"));
 }

@@ -1,13 +1,12 @@
 const MM_TO_PX = 96 / 25.4;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
-const PDF_MARGIN_MM = 20;
-const PRINT_MARGIN_TOP_MM = 25;
-const PRINT_MARGIN_RIGHT_MM = 20;
-const PRINT_MARGIN_BOTTOM_MM = 20;
-const PRINT_MARGIN_LEFT_MM = 20;
-const PRINT_HEADER_TOP_MM = 10;
-const EXPORT_SURFACE_PADDING_PX = 20;
+const PDF_MARGIN_MM = 12;
+const PRINT_MARGIN_TOP_MM = 12;
+const PRINT_MARGIN_RIGHT_MM = 12;
+const PRINT_MARGIN_BOTTOM_MM = 14;
+const PRINT_MARGIN_LEFT_MM = 12;
+const EXPORT_SURFACE_PADDING_PX = 0;
 const PAGE_WIDTH_PX = Math.round((A4_WIDTH_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
 const PAGE_HEIGHT_PX = Math.round((A4_HEIGHT_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
 
@@ -79,6 +78,7 @@ const PDF_EXPORT_STYLES = `
   .pdf-export-document .eduforge-document__page {
     width: auto !important;
     margin: 0 !important;
+    padding: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
   }
@@ -141,14 +141,16 @@ const PDF_EXPORT_STYLES = `
   .pdf-export-document .katex-display,
   .pdf-export-document .pdf-formula-block,
   .pdf-export-document .pdf-table-wrapper,
-  .pdf-export-document table,
-  .pdf-export-document thead,
-  .pdf-export-document tbody,
   .pdf-export-document tr,
-  .pdf-export-document td,
-  .pdf-export-document th,
   .pdf-export-document pre,
-  .pdf-export-document blockquote {
+  .pdf-export-document blockquote,
+  .pdf-export-document .formula-box,
+  .pdf-export-document .summary-box,
+  .pdf-export-document .instructions-box,
+  .pdf-export-document .case-box,
+  .pdf-export-document .worksheet-section,
+  .pdf-export-document .exam-section,
+  .pdf-export-document .mindmap-box {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -312,18 +314,17 @@ const PDF_EXPORT_STYLES = `
       page-break-inside: auto;
     }
 
-    body.pdf-print-mode .print-container .pdf-header,
-    body.pdf-print-mode .print-container .header {
-      margin-top: ${PRINT_HEADER_TOP_MM}mm;
-    }
-
     body.pdf-print-mode .print-container table,
     body.pdf-print-mode .print-container .pdf-table-wrapper,
     body.pdf-print-mode .print-container thead,
-    body.pdf-print-mode .print-container tbody,
     body.pdf-print-mode .print-container tr,
-    body.pdf-print-mode .print-container td,
-    body.pdf-print-mode .print-container th {
+    body.pdf-print-mode .print-container .formula-box,
+    body.pdf-print-mode .print-container .summary-box,
+    body.pdf-print-mode .print-container .instructions-box,
+    body.pdf-print-mode .print-container .case-box,
+    body.pdf-print-mode .print-container .worksheet-section,
+    body.pdf-print-mode .print-container .exam-section,
+    body.pdf-print-mode .print-container .mindmap-box {
       break-inside: avoid;
       page-break-inside: avoid;
     }

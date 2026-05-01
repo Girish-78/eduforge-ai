@@ -234,8 +234,6 @@ h4 {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  break-inside: avoid;
-  page-break-inside: avoid;
 }
 
 #pdf-content pre,
@@ -264,11 +262,8 @@ h4 {
   color: #0f172a;
 }
 
-#pdf-content .pdf-table-wrapper,
-#pdf-content table,
 #pdf-content tr,
-#pdf-content td,
-#pdf-content th {
+#pdf-content thead {
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -282,63 +277,4 @@ h4 {
 #pdf-content.pdf-export-ready th {
   overflow: visible !important;
   max-height: none !important;
-}
-
-@media print {
-  @page {
-    size: A4;
-    margin: 0;
-  }
-
-  body.pdf-print-mode {
-    margin: 0;
-    padding: 0;
-    background: #ffffff;
-  }
-
-  body.pdf-print-mode * {
-    visibility: hidden;
-  }
-
-  body.pdf-print-mode #pdf-content,
-  body.pdf-print-mode #pdf-content * {
-    visibility: visible;
-  }
-
-  body.pdf-print-mode #pdf-content {
-    position: static;
-    width: auto;
-    max-width: none;
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    background: #ffffff;
-    box-shadow: none;
-    border-radius: 0;
-  }
-
-  body.pdf-print-mode .print-container {
-    margin: 25mm 20mm 20mm 20mm;
-    overflow: visible;
-  }
-
-  body.pdf-print-mode .print-container .pdf-header,
-  body.pdf-print-mode .print-container .header {
-    margin-top: 10mm;
-  }
-
-  body.pdf-print-mode .print-container table,
-  body.pdf-print-mode .print-container .pdf-table-wrapper,
-  body.pdf-print-mode .print-container thead,
-  body.pdf-print-mode .print-container tbody,
-  body.pdf-print-mode .print-container tr,
-  body.pdf-print-mode .print-container td,
-  body.pdf-print-mode .print-container th {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  body.pdf-print-mode .print-container thead {
-    display: table-header-group;
-  }
 }

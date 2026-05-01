@@ -67,7 +67,6 @@ export function AuthForm({ mode }: AuthFormProps) {
         try {
           const credential = await signInWithEmailAndPassword(auth, email, password);
           authUserUid = credential.user.uid;
-          console.log("Authenticated Firebase user:", authUserUid);
         } catch (authError) {
           console.error("Firebase client sign-in error", authError);
           await fetch("/api/auth", { method: "DELETE" });
@@ -152,7 +151,7 @@ export function AuthForm({ mode }: AuthFormProps) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none ring-slate-200 focus:ring-2"
-            placeholder="••••••••"
+            placeholder="Password"
           />
         </div>
         {!isLogin ? (

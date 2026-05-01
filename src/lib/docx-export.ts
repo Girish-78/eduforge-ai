@@ -2,10 +2,12 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
   HeadingLevel,
   ImageRun,
   LevelFormat,
   Packer,
+  PageNumber,
   Paragraph,
   Table,
   TableCell,
@@ -16,17 +18,22 @@ import {
 } from "docx";
 
 import {
-  buildStructuredExportBlocks,
   cleanInlineMarkdown,
+  getPreferredTableColumnPercentages,
   normalizeText,
   prepareExportMarkdown,
   renderMathToPlainText,
+  type ExportVisualAsset,
 } from "@/lib/export-content";
 import type { ExportLogoAsset } from "@/lib/export-logo";
 import type { GenerateType } from "@/lib/prompt-templates";
 
 const NUMBERING_REFERENCE = "eduforge-numbering";
 const DOCX_FONT_FAMILY = "Times New Roman";
+const DOCX_MAX_VISUAL_WIDTH_PX = 520;
+const DOCX_MAX_VISUAL_HEIGHT_PX = 300;
+const TRANSPARENT_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2pRk8AAAAASUVORK5CYII=";
 
 interface DocxHeaderOptions {
   toolType: GenerateType;
@@ -52,6 +59,113 @@ type RunFormat = {
   font?: string;
   size?: number;
 };
+
+function clampVisualDimensions(width: number, height: number) {
+  const safeWidth = width > 0 ? width : DOCX_MAX_VISUAL_WIDTH_PX;
+  const safeHeight = height > 0 ? height : DOCX_MAX_VISUAL_HEIGHT_PX;
+  const scale = Math.min(
+    DOCX_MAX_VISUAL_WIDTH_PX / safeWidth,
+    DOCX_MAX_VISUAL_HEIGHT_PX / safeHeight,
+    1,
+  );
+
+  return {
+    width: Math.max(1, Math.round(safeWidth * scale)),
+    height: Math.max(1, Math.round(safeHeight * scale)),
+  };
+}
+
+function createAltText(asset: ExportVisualAsset) {
+  const name = (asset.altText || asset.caption || "Visual").trim();
+  return {
+    name: name.slice(0, 80) || "Visual",
+    description: (asset.caption || asset.altText || "Visual").trim().slice(0, 200) || "Visual",
+  };
+}
+
+function getTransparentPngBytes() {
+  return Buffer.from(TRANSPARENT_PNG_BASE64, "base64");
+}
+
+function detectRegularImageType(source: Uint8Array, contentType?: string | null) {
+  const normalizedContentType = contentType?.toLowerCase() ?? "";
+
+  if (normalizedContentType.includes("image/png")) {
+    return "png" as const;
+  }
+
+  if (normalizedContentType.includes("image/jpeg")) {
+    return "jpg" as const;
+  }
+
+  if (normalizedContentType.includes("image/gif")) {
+    return "gif" as const;
+  }
+
+  if (normalizedContentType.includes("image/bmp")) {
+    return "bmp" as const;
+  }
+
+  if (source[0] === 0x89 && source[1] === 0x50 && source[2] === 0x4e && source[3] === 0x47) {
+    return "png" as const;
+  }
+
+  if (source[0] === 0xff && source[1] === 0xd8) {
+    return "jpg" as const;
+  }
+
+  if (source[0] === 0x47 && source[1] === 0x49 && source[2] === 0x46) {
+    return "gif" as const;
+  }
+
+  if (source[0] === 0x42 && source[1] === 0x4d) {
+    return "bmp" as const;
+  }
+
+  throw new Error("Unsupported image type for DOCX export.");
+}
+
+async function resolveVisualAssetData(asset: ExportVisualAsset) {
+  if (asset.type === "svg") {
+    return {
+      type: "svg" as const,
+      data: Buffer.from(asset.source, "utf8"),
+    };
+  }
+
+  const dataUrlMatch = asset.source.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?(;base64)?,(.*)$/i);
+  if (dataUrlMatch) {
+    const mimeType = (dataUrlMatch[1] ?? "").toLowerCase();
+    const payload = dataUrlMatch[3] ?? "";
+    const imageBytes = dataUrlMatch[2]
+      ? Buffer.from(payload, "base64")
+      : Buffer.from(decodeURIComponent(payload), "utf8");
+
+    return {
+      type: detectRegularImageType(imageBytes, mimeType),
+      data: imageBytes,
+    };
+  }
+
+  const response = await fetch(asset.source);
+  if (!response.ok) {
+    throw new Error(`Unable to load visual asset for DOCX export (status ${response.status}).`);
+  }
+
+  const contentType = response.headers.get("content-type");
+  if (contentType?.toLowerCase().includes("image/svg+xml") || /\.svg(?:$|\?)/i.test(asset.source)) {
+    return {
+      type: "svg" as const,
+      data: Buffer.from(await response.text(), "utf8"),
+    };
+  }
+
+  const responseBytes = new Uint8Array(await response.arrayBuffer());
+  return {
+    type: detectRegularImageType(responseBytes, contentType),
+    data: responseBytes,
+  };
+}
 
 const SCIENTIFIC_PATTERN =
   /([\p{Script=Greek}A-Za-z0-9/)\]]+)\^\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)_\{([^}]+)\}|([\p{Script=Greek}A-Za-z0-9/)\]]+)\^([A-Za-z0-9+\-*/=().]+)|([\p{Script=Greek}A-Za-z0-9/)\]]+)_([A-Za-z0-9+\-*/=().]+)|(\b(?=[A-Za-z0-9]*\d)(?:[A-Z][a-z]?\d*)+\b)/gu;
@@ -341,7 +455,11 @@ function buildHeaderBlocks({
 }
 
 function createTableBlock(headerCells: string[], bodyRows: string[][]) {
-  const columnWidth = Math.max(1, Math.floor(100 / Math.max(headerCells.length, 1)));
+  const columnPercentages =
+    getPreferredTableColumnPercentages(headerCells) ??
+    Array.from({ length: Math.max(headerCells.length, 1) }, () =>
+      Math.max(1, Math.floor(100 / Math.max(headerCells.length, 1))),
+    );
 
   return new Table({
     layout: TableLayoutType.FIXED,
@@ -383,10 +501,10 @@ function createTableBlock(headerCells: string[], bodyRows: string[][]) {
     },
     rows: [
       new TableRow({
-        children: headerCells.map((cell) => {
+        children: headerCells.map((cell, index) => {
           return new TableCell({
             width: {
-              size: columnWidth,
+              size: columnPercentages[index] ?? columnPercentages[columnPercentages.length - 1] ?? 100,
               type: WidthType.PERCENTAGE,
             },
             shading: {
@@ -412,10 +530,10 @@ function createTableBlock(headerCells: string[], bodyRows: string[][]) {
       }),
       ...bodyRows.map((row) => {
         return new TableRow({
-          children: row.map((cell) => {
+          children: row.map((cell, index) => {
             return new TableCell({
               width: {
-                size: columnWidth,
+                size: columnPercentages[index] ?? columnPercentages[columnPercentages.length - 1] ?? 100,
                 type: WidthType.PERCENTAGE,
               },
               margins: {
@@ -440,10 +558,6 @@ function createTableBlock(headerCells: string[], bodyRows: string[][]) {
 }
 
 function getPreparedExportBlocks(options: CreateDocxBlobOptions) {
-  if (options.exportTextContent?.trim()) {
-    return buildStructuredExportBlocks(options.exportTextContent);
-  }
-
   return prepareExportMarkdown(options.content, {
     title: options.title,
     toolType: options.toolType,
@@ -455,14 +569,83 @@ function getPreparedExportBlocks(options: CreateDocxBlobOptions) {
   }).blocks;
 }
 
-function buildBodyBlocks(preparedBlocks: ReturnType<typeof getPreparedExportBlocks>, title: string) {
+async function createVisualBlocks(asset: ExportVisualAsset): Promise<Paragraph[]> {
+  const dimensions = clampVisualDimensions(asset.width, asset.height);
+
+  try {
+    const visualData = await resolveVisualAssetData(asset);
+    const visualRun =
+      visualData.type === "svg"
+        ? new ImageRun({
+            type: "svg",
+            data: visualData.data,
+            fallback: {
+              type: "png",
+              data: getTransparentPngBytes(),
+            },
+            transformation: dimensions,
+            altText: createAltText(asset),
+          })
+        : new ImageRun({
+            type: visualData.type,
+            data: visualData.data,
+            transformation: dimensions,
+            altText: createAltText(asset),
+          });
+
+    const blocks = [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: {
+          before: 120,
+          after: asset.caption?.trim() ? 80 : 120,
+        },
+        children: [visualRun],
+      }),
+    ];
+
+    if (asset.caption?.trim()) {
+      blocks.push(
+        createParagraphFromText(asset.caption, {
+          alignment: AlignmentType.CENTER,
+          color: "64748B",
+          size: 20,
+          spacingAfter: 120,
+        }),
+      );
+    }
+
+    return blocks;
+  } catch (error) {
+    const fallbackLabel = asset.caption || asset.altText || "Visual";
+    console.error("DOCX visual export fallback applied", error);
+    return [
+      createParagraphFromText(`[Visual retained in preview/print: ${fallbackLabel}]`, {
+        alignment: AlignmentType.CENTER,
+        color: "64748B",
+        size: 20,
+        spacingAfter: 120,
+      }),
+    ];
+  }
+}
+
+async function buildBodyBlocks(
+  preparedBlocks: ReturnType<typeof getPreparedExportBlocks>,
+  title: string,
+) {
   const blocks: DocxBlock[] = [];
   let insertedTitle = false;
 
-  preparedBlocks.forEach((block) => {
+  for (const block of preparedBlocks) {
     if (block.type === "table") {
       blocks.push(createTableBlock(block.headerCells, block.bodyRows));
-      return;
+      continue;
+    }
+
+    if (block.type === "visual") {
+      blocks.push(...(await createVisualBlocks(block.asset)));
+      continue;
     }
 
     if (block.type === "heading") {
@@ -470,7 +653,7 @@ function buildBodyBlocks(preparedBlocks: ReturnType<typeof getPreparedExportBloc
 
       if (!insertedTitle && normalizedHeading === normalizeText(title)) {
         insertedTitle = true;
-        return;
+        continue;
       }
 
       blocks.push(
@@ -488,7 +671,7 @@ function buildBodyBlocks(preparedBlocks: ReturnType<typeof getPreparedExportBloc
           spacingAfter: block.level === 1 ? 140 : 100,
         }),
       );
-      return;
+      continue;
     }
 
     if (block.type === "list") {
@@ -505,7 +688,7 @@ function buildBodyBlocks(preparedBlocks: ReturnType<typeof getPreparedExportBloc
           }),
         );
       });
-      return;
+      continue;
     }
 
     blocks.push(
@@ -515,12 +698,48 @@ function buildBodyBlocks(preparedBlocks: ReturnType<typeof getPreparedExportBloc
         spacingAfter: 140,
       }),
     );
-  });
+  }
 
   return {
     blocks,
     insertedTitle,
   };
+}
+
+function createDocumentFooter() {
+  return new Footer({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: {
+          before: 120,
+          after: 0,
+        },
+        children: [
+          createTextRun("Eduforge AI | Page ", {
+            color: "64748B",
+            size: 18,
+          }),
+          new TextRun({
+            children: [PageNumber.CURRENT],
+            color: "64748B",
+            font: DOCX_FONT_FAMILY,
+            size: 18,
+          }),
+          createTextRun(" of ", {
+            color: "64748B",
+            size: 18,
+          }),
+          new TextRun({
+            children: [PageNumber.TOTAL_PAGES],
+            color: "64748B",
+            font: DOCX_FONT_FAMILY,
+            size: 18,
+          }),
+        ],
+      }),
+    ],
+  });
 }
 
 export async function createDocxBlob({
@@ -535,7 +754,7 @@ export async function createDocxBlob({
   periods,
   logo,
 }: CreateDocxBlobOptions) {
-  const body = buildBodyBlocks(
+  const body = await buildBodyBlocks(
     getPreparedExportBlocks({
       title,
       content,
@@ -579,6 +798,21 @@ export async function createDocxBlob({
     },
     sections: [
       {
+        properties: {
+          page: {
+            margin: {
+              top: 1080,
+              right: 900,
+              bottom: 1080,
+              left: 900,
+              header: 420,
+              footer: 540,
+            },
+          },
+        },
+        footers: {
+          default: createDocumentFooter(),
+        },
         children: [
           ...buildHeaderBlocks({
             toolType,

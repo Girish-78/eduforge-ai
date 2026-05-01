@@ -96,7 +96,6 @@ Then add real values for all keys:
   - `FIREBASE_CLIENT_EMAIL`
   - `FIREBASE_PRIVATE_KEY`
   - `FIREBASE_STORAGE_BUCKET`
-- OpenAI:
 - Gemini:
   - `GEMINI_API_KEY`
 

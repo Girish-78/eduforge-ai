@@ -9,6 +9,7 @@ import {
   isLikelyHtml,
   parseToolPromptMetadata,
 } from "@/lib/generated-document";
+import { isGenerateType } from "@/lib/prompt-templates";
 
 interface SavedDocument {
   id: string;
@@ -108,6 +109,7 @@ export default function DocumentsPage() {
       title:
         metadata.toolTitle?.trim() ||
         selected.type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      toolType: isGenerateType(selected.type) ? selected.type : "notes",
       schoolName: metadata.schoolName,
       className: metadata.className,
       subject: metadata.subject,

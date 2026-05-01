@@ -1,3 +1,5 @@
+import type { GenerateType } from "@/lib/prompt-templates";
+
 export interface GeneratedDocumentMetadata {
   schoolName?: string;
   subject?: string;
@@ -5,6 +7,7 @@ export interface GeneratedDocumentMetadata {
   chapter?: string;
   periods?: string;
   title: string;
+  toolType: GenerateType;
   branding?: string;
   logoDataUrl?: string | null;
 }
@@ -36,17 +39,17 @@ export const GENERATED_DOCUMENT_STYLE = `
     color: #0f172a;
     font-family: Cambria, "Times New Roman", Georgia, serif;
     font-size: 16px;
-    line-height: 1.55;
+    line-height: 1.58;
   }
 
   .eduforge-document__page {
     box-sizing: border-box;
     width: min(100%, 794px);
     margin: 0 auto;
-    padding: 0.95in 0.7in 0.9in;
+    padding: 0.86in 0.72in 0.84in;
     background: #ffffff;
-    border-radius: 22px;
-    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    border-radius: 20px;
+    box-shadow: 0 18px 38px rgba(15, 23, 42, 0.07);
   }
 
   .eduforge-document__header {
@@ -87,7 +90,8 @@ export const GENERATED_DOCUMENT_STYLE = `
     font-size: 21px;
     font-weight: 700;
     color: #1e3a8a;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
   }
 
   .eduforge-document__body {
@@ -101,10 +105,14 @@ export const GENERATED_DOCUMENT_STYLE = `
   .eduforge-document__body section,
   .eduforge-document__body article,
   .eduforge-document__body figure,
-  .eduforge-document__body table,
   .eduforge-document__body svg,
   .eduforge-document__body .formula-box,
   .eduforge-document__body .summary-box,
+  .eduforge-document__body .instructions-box,
+  .eduforge-document__body .case-box,
+  .eduforge-document__body .worksheet-section,
+  .eduforge-document__body .exam-section,
+  .eduforge-document__body .mindmap-box,
   .eduforge-document__body .page-break {
     break-inside: avoid;
     page-break-inside: avoid;
@@ -147,7 +155,7 @@ export const GENERATED_DOCUMENT_STYLE = `
   .eduforge-document__body li {
     margin: 0 0 12px;
     font-size: 16px;
-    line-height: 1.55;
+    line-height: 1.58;
   }
 
   .eduforge-document__body ul,
@@ -187,7 +195,7 @@ export const GENERATED_DOCUMENT_STYLE = `
     border-radius: 14px;
     overflow: hidden;
     background: #ffffff;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
     font-size: 14px;
     line-height: 1.45;
   }
@@ -232,6 +240,13 @@ export const GENERATED_DOCUMENT_STYLE = `
     background: #f8fbff;
   }
 
+  .eduforge-document__body tr,
+  .eduforge-document__body th,
+  .eduforge-document__body td {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   .eduforge-document__body td > ul,
   .eduforge-document__body td > ol,
   .eduforge-document__body th > ul,
@@ -260,26 +275,7 @@ export const GENERATED_DOCUMENT_STYLE = `
     line-height: 1.38;
   }
 
-  .eduforge-document__body .lesson-plan-table thead tr:first-child th[colspan] {
-    background: linear-gradient(180deg, #eef4ff 0%, #dce9ff 100%);
-    padding: 14px 16px;
-    border-bottom: 2px solid #b7c9e6;
-  }
-
-  .eduforge-document__body .lesson-plan-table thead tr:first-child h2 {
-    margin: 0 0 6px;
-    font-size: 18px;
-    color: #0f172a;
-  }
-
-  .eduforge-document__body .lesson-plan-table thead tr:first-child p {
-    margin: 0;
-    font-size: 12.5px;
-    color: #334155;
-    line-height: 1.45;
-  }
-
-  .eduforge-document__body .lesson-plan-table thead tr:last-child th {
+  .eduforge-document__body .lesson-plan-table thead th {
     padding: 10px 8px;
     background: #d7e7ff;
     font-size: 12px;
@@ -320,11 +316,16 @@ export const GENERATED_DOCUMENT_STYLE = `
   .eduforge-document__body .lesson-plan-table td:nth-child(7),
   .eduforge-document__body .lesson-plan-table th:nth-child(8),
   .eduforge-document__body .lesson-plan-table td:nth-child(8) {
-    width: 9.3%;
+    width: 10%;
   }
 
   .eduforge-document__body .formula-box,
   .eduforge-document__body .summary-box,
+  .eduforge-document__body .instructions-box,
+  .eduforge-document__body .case-box,
+  .eduforge-document__body .worksheet-section,
+  .eduforge-document__body .exam-section,
+  .eduforge-document__body .mindmap-box,
   .eduforge-document__body blockquote {
     margin: 14px 0 18px;
     padding: 12px 14px;
@@ -332,6 +333,32 @@ export const GENERATED_DOCUMENT_STYLE = `
     border-left: 4px solid #2563eb;
     border-radius: 14px;
     background: #f8fbff;
+  }
+
+  .eduforge-document__body .instructions-box {
+    background: #f8fafc;
+    border-left-color: #0f172a;
+  }
+
+  .eduforge-document__body .worksheet-section,
+  .eduforge-document__body .exam-section {
+    background: #fbfdff;
+  }
+
+  .eduforge-document__body .answer-key {
+    margin-top: 26px;
+    border-top: 2px solid #cbd5e1;
+    padding-top: 12px;
+  }
+
+  .eduforge-document__body .timeline-table th,
+  .eduforge-document__body .timeline-table td {
+    vertical-align: top;
+  }
+
+  .eduforge-document__body .mindmap-box {
+    border-left-color: #0f766e;
+    background: #f0fdfa;
   }
 
   .eduforge-document__body figure {
@@ -355,7 +382,7 @@ export const GENERATED_DOCUMENT_STYLE = `
 
   .eduforge-document__footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     gap: 12px;
     margin-top: 30px;
@@ -365,16 +392,48 @@ export const GENERATED_DOCUMENT_STYLE = `
     color: #64748b;
   }
 
-  .eduforge-document__footer-page::after {
-    content: "1";
+  .eduforge-document--question_paper .eduforge-document__title {
+    letter-spacing: 0.08em;
+  }
+
+  .eduforge-document--question_paper .eduforge-document__body h2 {
+    color: #7c2d12;
+    border-bottom-color: #fed7aa;
+  }
+
+  .eduforge-document--worksheet .eduforge-document__body h2,
+  .eduforge-document--practice_questions .eduforge-document__body h2 {
+    color: #1d4ed8;
+  }
+
+  .eduforge-document--cheatsheet .eduforge-document__body h2 {
+    color: #0f766e;
+    border-bottom-color: #99f6e4;
+  }
+
+  .eduforge-document--cheatsheet .eduforge-document__body .formula-box,
+  .eduforge-document--cheatsheet .eduforge-document__body .summary-box,
+  .eduforge-document--notes .eduforge-document__body .formula-box {
+    border-left-color: #0f766e;
+    background: #f0fdfa;
+  }
+
+  .eduforge-document--lesson_plan .eduforge-document__body table {
+    box-shadow: none;
+    border-radius: 12px;
+  }
+
+  .eduforge-document--lesson_plan .eduforge-document__body th {
+    background: #dbeafe;
+  }
+
+  .eduforge-document--notes .eduforge-document__body blockquote,
+  .eduforge-document--notes .eduforge-document__body .case-box {
+    border-left-color: #7c3aed;
+    background: #faf5ff;
   }
 
   @media print {
-    @page {
-      size: A4;
-      margin: 1in 0.75in;
-    }
-
     html,
     body {
       margin: 0;
@@ -388,10 +447,6 @@ export const GENERATED_DOCUMENT_STYLE = `
       padding: 0;
       border-radius: 0;
       box-shadow: none;
-    }
-
-    .eduforge-document__footer-page::after {
-      content: counter(page);
     }
   }
 `;
@@ -476,7 +531,6 @@ function buildFooterHtml(metadata: GeneratedDocumentMetadata) {
   return [
     '<footer class="eduforge-document__footer">',
     `<span>${escapeHtml(branding)}</span>`,
-    '<span>Page <span class="eduforge-document__footer-page"></span></span>',
     "</footer>",
   ].join("");
 }
@@ -492,12 +546,13 @@ function buildGeneratedDocumentMarkup(
   metadata: GeneratedDocumentMetadata,
 ) {
   const bodyHtml = prepareGeneratedBodyHtml(bodyContent);
+  const toolTypeClass = metadata.toolType.replace(/_/g, "_");
 
   return [
-    '<div class="eduforge-document">',
-    '<article class="eduforge-document__page">',
+    `<div class="eduforge-document eduforge-document--${toolTypeClass}">`,
+    `<article class="eduforge-document__page eduforge-document__page--${toolTypeClass}">`,
     buildHeaderHtml(metadata),
-    `<main class="eduforge-document__body">${bodyHtml}</main>`,
+    `<main class="eduforge-document__body eduforge-document__body--${toolTypeClass}">${bodyHtml}</main>`,
     buildFooterHtml(metadata),
     "</article>",
     "</div>",

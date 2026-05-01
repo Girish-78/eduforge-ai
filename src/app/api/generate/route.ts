@@ -13,19 +13,18 @@ import { consumeUsage } from "@/lib/usage";
 
 // --- MASTER CONFIGURATION ---
 
-/** * 1. FIX THE VERCEL TIMEOUT
- * On Hobby tier, the default is 10s. This line extends it to 60s.
- * This is crucial for 'exhaustive' AI generations.
+/**
+ * Allow enough time for detailed document generation on hosted runtimes.
  */
-export const maxDuration = 60; 
+export const maxDuration = 60;
 export const runtime = "nodejs"; // Required for Firebase-Admin SDK compatibility
 
 /**
- * 2. USE THE LATEST 2026 FRONTIER MODEL
- * 'gemini-flash-latest' automatically points to the most stable Gemini 3 Flash.
- * We use the v1beta endpoint to enable 'Thinking' capabilities.
+ * Use Gemini 2.5 Flash by default. The model can be overridden for rollout
+ * testing with GEMINI_MODEL, but the stable model is safest for production.
  */
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const GEMINI_TIMEOUT_MS = 55_000; // Leave 5s buffer for Vercel
 const RETRY_DELAY_MS = [1000, 3000]; // Delay before retry 1 and retry 2
 
@@ -72,7 +71,7 @@ async function callGeminiWithRetry(apiKey: string, prompt: string, requestId: st
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 8192, // Increased for exhaustive physics lesson plans
-          }
+          },
         }),
         signal: controller.signal,
         cache: "no-store",
@@ -95,7 +94,10 @@ async function callGeminiWithRetry(apiKey: string, prompt: string, requestId: st
       const payload = (await response.json()) as GeminiApiResponse;
       const text = payload.candidates?.[0]?.content?.parts?.[0]?.text;
 
-      if (!text) throw new Error("Empty AI response");
+      if (!text) {
+        const finishReason = payload.candidates?.[0]?.finishReason;
+        throw new Error(finishReason ? `Empty AI response (${finishReason})` : "Empty AI response");
+      }
       return text;
 
     } catch (error: unknown) {
@@ -133,8 +135,10 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as GenerateBody;
     const { type, input, title } = body;
+    const trimmedInput = input?.trim() ?? "";
+    const trimmedTitle = title?.trim() ?? "";
 
-    if (!type || !isGenerateType(type) || !input) {
+    if (!type || !isGenerateType(type) || !trimmedInput) {
       return NextResponse.json({ success: false, message: "Missing required fields" }, { status: 400 });
     }
 
@@ -153,7 +157,7 @@ export async function POST(request: Request) {
     }
 
     // 4. Content Generation
-    const finalPrompt = generatePrompt({ toolType: type, inputs: input });
+    const finalPrompt = generatePrompt({ toolType: type, inputs: trimmedInput });
     const aiText = await callGeminiWithRetry(apiKey, finalPrompt, requestId);
 
     // 5. Background Save to Firebase
@@ -162,8 +166,8 @@ export async function POST(request: Request) {
       await db.collection("documents").add({
         userId: session.email,
         type,
-        title: title || "Untitled Lesson Plan",
-        input,
+        title: trimmedTitle || "Untitled Lesson Plan",
+        input: trimmedInput,
         output: aiText,
         timestamp: Timestamp.now(),
       });
@@ -187,5 +191,5 @@ export async function POST(request: Request) {
 /** * Separate Health Route check (Optional but recommended)
  */
 export async function GET() {
-  return NextResponse.json({ status: "ok", engine: "Gemini 3 Flash", timeout: "60s" });
+  return NextResponse.json({ status: "ok", engine: GEMINI_MODEL, timeout: "60s" });
 }

@@ -21,6 +21,16 @@ export interface PreparedExportMarkdown {
   strippedHeaderLineCount: number;
 }
 
+export interface ExportVisualAsset {
+  placeholder: string;
+  type: "image" | "svg";
+  source: string;
+  width: number;
+  height: number;
+  altText: string;
+  caption?: string;
+}
+
 export type ExportContentBlock =
   | {
       type: "heading";
@@ -40,6 +50,10 @@ export type ExportContentBlock =
       type: "table";
       headerCells: string[];
       bodyRows: string[][];
+    }
+  | {
+      type: "visual";
+      asset: ExportVisualAsset;
     };
 
 type MathSegment =
@@ -209,7 +223,16 @@ const HTML_TABLE_ROW_OPEN_PATTERN = /<tr\b[^>]*>/gi;
 const HTML_TABLE_ROW_CLOSE_PATTERN = /<\/tr>/gi;
 const HTML_TABLE_CELL_OPEN_PATTERN = /<t[dh]\b[^>]*>/gi;
 const HTML_TABLE_CELL_CLOSE_PATTERN = /<\/t[dh]>/gi;
+const HTML_TABLE_BLOCK_PATTERN = /<table\b[^>]*>[\s\S]*?<\/table>/gi;
+const HTML_TABLE_ROW_BLOCK_PATTERN = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+const HTML_TABLE_CELL_BLOCK_PATTERN = /<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi;
 const HTML_TAG_PATTERN = /<\/?[^>]+(>|$)/g;
+const FIGURE_TAG_PATTERN = /<figure\b[^>]*>[\s\S]*?<\/figure>/gi;
+const SVG_TAG_PATTERN = /<svg\b[^>]*>[\s\S]*?<\/svg>/gi;
+const IMG_TAG_PATTERN = /<img\b[^>]*>/gi;
+const FIGCAPTION_TAG_PATTERN = /<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i;
+const VISUAL_PLACEHOLDER_PATTERN = /^\[\[EDUFORGE_VISUAL_(\d+)\]\]$/;
+const VISUAL_PLACEHOLDER_PREFIX = "[[EDUFORGE_VISUAL_";
 const HTML_ENTITY_MAP: Record<string, string> = {
   "&nbsp;": " ",
   "&amp;": "&",
@@ -261,6 +284,281 @@ function normalizeParagraphSpacing(value: string) {
     .trim();
 }
 
+function getHtmlAttribute(markup: string, attributeName: string) {
+  const escapedName = attributeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `${escapedName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    "i",
+  );
+  const match = markup.match(pattern);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? "";
+}
+
+function parseDimensionValue(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.endsWith("%")) {
+    return null;
+  }
+
+  const match = trimmed.match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+
+  const numericValue = Number(match[0]);
+  return Number.isFinite(numericValue) && numericValue > 0 ? Math.round(numericValue) : null;
+}
+
+function parseSvgDimensions(markup: string) {
+  const width = parseDimensionValue(getHtmlAttribute(markup, "width"));
+  const height = parseDimensionValue(getHtmlAttribute(markup, "height"));
+
+  if (width && height) {
+    return { width, height };
+  }
+
+  const viewBox = getHtmlAttribute(markup, "viewBox");
+  if (viewBox) {
+    const values = viewBox
+      .trim()
+      .split(/[\s,]+/)
+      .map((token) => Number(token))
+      .filter((token) => Number.isFinite(token));
+
+    if (values.length === 4 && values[2] > 0 && values[3] > 0) {
+      return {
+        width: width ?? Math.round(values[2]),
+        height: height ?? Math.round(values[3]),
+      };
+    }
+  }
+
+  return {
+    width: width ?? 640,
+    height: height ?? 360,
+  };
+}
+
+function normalizeSvgMarkup(markup: string) {
+  const normalized = markup.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (/xmlns\s*=\s*["']http:\/\/www\.w3\.org\/2000\/svg["']/i.test(normalized)) {
+    return normalized;
+  }
+
+  return normalized.replace(
+    /<svg\b/i,
+    '<svg xmlns="http://www.w3.org/2000/svg"',
+  );
+}
+
+function decodeDataUrlPayload(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?(;base64)?,(.*)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const mimeType = (match[1] ?? "").toLowerCase();
+  const encodedPayload = match[3] ?? "";
+
+  try {
+    let payload = "";
+
+    if (match[2]) {
+      if (typeof Buffer !== "undefined") {
+        payload = Buffer.from(encodedPayload, "base64").toString("utf8");
+      } else if (typeof atob === "function") {
+        const binary = atob(encodedPayload);
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+        payload = new TextDecoder().decode(bytes);
+      } else {
+        return null;
+      }
+    } else {
+      payload = decodeURIComponent(encodedPayload);
+    }
+
+    return {
+      mimeType,
+      payload,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function stripInlineHtml(value: string) {
+  return normalizeParagraphSpacing(
+    decodeHtmlEntities(
+      value
+        .replace(HTML_BREAK_PATTERN, "\n")
+        .replace(HTML_TAG_PATTERN, " ")
+        .replace(/[ \t]+\n/g, "\n"),
+    ),
+  );
+}
+
+function createVisualPlaceholder(index: number) {
+  return `${VISUAL_PLACEHOLDER_PREFIX}${index}]]`;
+}
+
+function createVisualAsset(
+  markup: string,
+  caption?: string,
+): Omit<ExportVisualAsset, "placeholder"> | null {
+  const svgMatch = markup.match(/<svg\b[^>]*>[\s\S]*?<\/svg>/i);
+  if (svgMatch?.[0]) {
+    const normalizedSvg = normalizeSvgMarkup(svgMatch[0]);
+    const dimensions = parseSvgDimensions(normalizedSvg);
+    const svgAltText =
+      stripInlineHtml(getHtmlAttribute(normalizedSvg, "aria-label")) ||
+      stripInlineHtml(getHtmlAttribute(normalizedSvg, "title")) ||
+      stripInlineHtml(caption ?? "") ||
+      "Diagram";
+
+    return {
+      type: "svg",
+      source: normalizedSvg,
+      width: dimensions.width,
+      height: dimensions.height,
+      altText: svgAltText,
+      caption: stripInlineHtml(caption ?? "") || undefined,
+    };
+  }
+
+  const imageMatch = markup.match(/<img\b[^>]*>/i);
+  if (!imageMatch?.[0]) {
+    return null;
+  }
+
+  const imageTag = imageMatch[0];
+  const src = getHtmlAttribute(imageTag, "src");
+  if (!src) {
+    return null;
+  }
+
+  const decodedDataUrl = src.startsWith("data:image/svg+xml")
+    ? decodeDataUrlPayload(src)
+    : null;
+  if (decodedDataUrl?.payload) {
+    const normalizedSvg = normalizeSvgMarkup(decodedDataUrl.payload);
+    const dimensions = parseSvgDimensions(normalizedSvg);
+
+    return {
+      type: "svg",
+      source: normalizedSvg,
+      width: dimensions.width,
+      height: dimensions.height,
+      altText:
+        stripInlineHtml(getHtmlAttribute(imageTag, "alt")) ||
+        stripInlineHtml(caption ?? "") ||
+        "Diagram",
+      caption: stripInlineHtml(caption ?? "") || undefined,
+    };
+  }
+
+  return {
+    type: "image",
+    source: src,
+    width: parseDimensionValue(getHtmlAttribute(imageTag, "width")) ?? 640,
+    height: parseDimensionValue(getHtmlAttribute(imageTag, "height")) ?? 360,
+    altText:
+      stripInlineHtml(getHtmlAttribute(imageTag, "alt")) ||
+      stripInlineHtml(caption ?? "") ||
+      "Illustration",
+    caption: stripInlineHtml(caption ?? "") || undefined,
+  };
+}
+
+function extractVisualAssets(content: string) {
+  const visualAssets: ExportVisualAsset[] = [];
+
+  const registerVisualAsset = (
+    markup: string,
+    caption?: string,
+  ) => {
+    const asset = createVisualAsset(markup, caption);
+    if (!asset) {
+      return markup;
+    }
+
+    const placeholder = createVisualPlaceholder(visualAssets.length + 1);
+    visualAssets.push({
+      ...asset,
+      placeholder,
+    });
+
+    return `\n\n${placeholder}\n\n`;
+  };
+
+  const withoutFigures = content.replace(FIGURE_TAG_PATTERN, (figureMarkup) => {
+    const caption = figureMarkup.match(FIGCAPTION_TAG_PATTERN)?.[1] ?? "";
+    return registerVisualAsset(figureMarkup, caption);
+  });
+
+  const withoutStandaloneSvg = withoutFigures.replace(SVG_TAG_PATTERN, (svgMarkup) =>
+    registerVisualAsset(svgMarkup),
+  );
+
+  const withPlaceholders = withoutStandaloneSvg.replace(IMG_TAG_PATTERN, (imageMarkup) =>
+    registerVisualAsset(imageMarkup),
+  );
+
+  return {
+    content: withPlaceholders,
+    visualAssets,
+  };
+}
+
+export function hasRichVisualContent(value: string) {
+  return /<(?:figure|svg|img)\b/i.test(value);
+}
+
+const LESSON_PLAN_TABLE_HEADERS = [
+  "week",
+  "period",
+  "topic subtopic",
+  "learning objectives",
+  "pedagogy 5e model",
+  "resources",
+  "assessment",
+  "competencies",
+];
+
+export function getPreferredTableColumnPercentages(headerCells: string[]) {
+  const normalizedHeaders = headerCells.map((header) => normalizeComparisonText(header));
+
+  if (
+    normalizedHeaders.length === LESSON_PLAN_TABLE_HEADERS.length &&
+    normalizedHeaders.every((header, index) => header === LESSON_PLAN_TABLE_HEADERS[index])
+  ) {
+    return [7, 7, 16, 18, 24, 9, 9, 10];
+  }
+
+  if (
+    normalizedHeaders.length === 2 &&
+    normalizedHeaders[1]?.includes("mark")
+  ) {
+    return [84, 16];
+  }
+
+  if (
+    normalizedHeaders.length === 3 &&
+    normalizedHeaders[2]?.includes("mark")
+  ) {
+    return [52, 30, 18];
+  }
+
+  return null;
+}
+
 function isMarkdownTableSeparator(line: string) {
   return /^\|\s*[:\-| ]+\|?\s*$/.test(line.trim());
 }
@@ -283,6 +581,10 @@ function isStructuredBlockLine(line: string, nextLine?: string) {
     return true;
   }
 
+  if (VISUAL_PLACEHOLDER_PATTERN.test(line.trim())) {
+    return true;
+  }
+
   if (/^(#{1,3})\s+.+$/.test(line)) {
     return true;
   }
@@ -298,9 +600,15 @@ function isStructuredBlockLine(line: string, nextLine?: string) {
   return isMarkdownTableRow(line) && isMarkdownTableSeparator(nextLine ?? "");
 }
 
-export function buildStructuredExportBlocks(content: string): ExportContentBlock[] {
+export function buildStructuredExportBlocks(
+  content: string,
+  visualAssets: readonly ExportVisualAsset[] = [],
+): ExportContentBlock[] {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const blocks: ExportContentBlock[] = [];
+  const visualAssetMap = new Map(
+    visualAssets.map((asset) => [asset.placeholder, asset] as const),
+  );
   let index = 0;
 
   while (index < lines.length) {
@@ -308,6 +616,16 @@ export function buildStructuredExportBlocks(content: string): ExportContentBlock
     const line = rawLine.trim();
 
     if (!line) {
+      index += 1;
+      continue;
+    }
+
+    const visualAsset = visualAssetMap.get(line);
+    if (visualAsset) {
+      blocks.push({
+        type: "visual",
+        asset: visualAsset,
+      });
       index += 1;
       continue;
     }
@@ -468,6 +786,91 @@ function normalizePipeSeparatedTables(value: string) {
   }
 
   return normalizedLines.join("\n");
+}
+
+function sanitizeTableCellText(value: string) {
+  return stripInlineHtml(value)
+    .replace(/\|/g, " / ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeHtmlTables(value: string) {
+  return value.replace(HTML_TABLE_BLOCK_PATTERN, (tableMarkup) => {
+    const rowEntries: { cells: string[]; hasHeaderCell: boolean }[] = [];
+    let rowMatch: RegExpExecArray | null = null;
+
+    HTML_TABLE_ROW_BLOCK_PATTERN.lastIndex = 0;
+
+    while ((rowMatch = HTML_TABLE_ROW_BLOCK_PATTERN.exec(tableMarkup)) !== null) {
+      const rowMarkup = rowMatch[1] ?? "";
+      const cells: string[] = [];
+      let hasHeaderCell = false;
+      let cellMatch: RegExpExecArray | null = null;
+
+      HTML_TABLE_CELL_BLOCK_PATTERN.lastIndex = 0;
+
+      while ((cellMatch = HTML_TABLE_CELL_BLOCK_PATTERN.exec(rowMarkup)) !== null) {
+        const fullCellMarkup = cellMatch[0] ?? "";
+        const cellContent = cellMatch[1] ?? "";
+        const normalizedCell = sanitizeTableCellText(cellContent);
+
+        if (normalizedCell) {
+          cells.push(normalizedCell);
+        } else {
+          cells.push(" ");
+        }
+
+        if (/^<th\b/i.test(fullCellMarkup)) {
+          hasHeaderCell = true;
+        }
+      }
+
+      if (cells.length > 0) {
+        rowEntries.push({
+          cells,
+          hasHeaderCell,
+        });
+      }
+    }
+
+    if (rowEntries.length === 0) {
+      return "\n";
+    }
+
+    const headerRowIndex = rowEntries.findIndex((row) => row.hasHeaderCell);
+    const normalizedRowCount = rowEntries.reduce(
+      (max, row) => Math.max(max, row.cells.length),
+      0,
+    );
+
+    if (normalizedRowCount === 0) {
+      return "\n";
+    }
+
+    const normalizeRowWidth = (cells: string[]) => {
+      const paddedCells = [...cells];
+      while (paddedCells.length < normalizedRowCount) {
+        paddedCells.push(" ");
+      }
+      return paddedCells;
+    };
+
+    const headerCells = normalizeRowWidth(
+      rowEntries[headerRowIndex >= 0 ? headerRowIndex : 0]?.cells ?? [],
+    );
+    const bodyRows = rowEntries
+      .filter((_, index) => index !== (headerRowIndex >= 0 ? headerRowIndex : 0))
+      .map((row) => normalizeRowWidth(row.cells));
+
+    const markdownLines = [
+      `| ${headerCells.join(" | ")} |`,
+      `| ${headerCells.map(() => "---").join(" | ")} |`,
+      ...bodyRows.map((row) => `| ${row.join(" | ")} |`),
+    ];
+
+    return `\n${markdownLines.join("\n")}\n`;
+  });
 }
 
 function normalizeListFormatting(value: string) {
@@ -697,7 +1100,8 @@ export function cleanGeneratedText(value: string) {
       normalizeListFormatting(
         cleanBrokenAsciiDiagrams(
           normalizePipeSeparatedTables(
-            value
+            normalizeHtmlTables(
+              value
               .replace(/\r\n/g, "\n")
               .replace(HTML_BREAK_PATTERN, "\n")
               .replace(HTML_HEADING_OPEN_PATTERN, (_, level: string) => `${"#".repeat(Number(level))} `)
@@ -708,7 +1112,7 @@ export function cleanGeneratedText(value: string) {
               .replace(HTML_LIST_ITEM_CLOSE_PATTERN, "\n")
               .replace(HTML_TABLE_OPEN_PATTERN, "\n")
               .replace(HTML_TABLE_CLOSE_PATTERN, "\n")
-              .replace(HTML_TABLE_ROW_OPEN_PATTERN, "")
+              .replace(HTML_TABLE_ROW_OPEN_PATTERN, "| ")
               .replace(HTML_TABLE_ROW_CLOSE_PATTERN, "\n")
               .replace(HTML_TABLE_CELL_OPEN_PATTERN, "")
               .replace(HTML_TABLE_CELL_CLOSE_PATTERN, " | ")
@@ -716,8 +1120,8 @@ export function cleanGeneratedText(value: string) {
               .replace(HTML_BLOCK_CLOSE_PATTERN, "\n\n")
               .replace(HTML_TAG_PATTERN, "")
               .replace(/[ \t]+\|/g, " |")
-              .replace(/\|[ \t]+\|/g, " | ")
-              .replace(/\|[ \t]*\n/g, "\n"),
+              .replace(/\|[ \t]+\|/g, " | "),
+            ),
           ),
         ),
       ),
@@ -1081,7 +1485,8 @@ export function prepareExportMarkdown(
   markdown: string,
   metadata: ExportHeaderMetadata,
 ): PreparedExportMarkdown {
-  const normalizedMarkdown = cleanGeneratedText(markdown);
+  const extractedVisuals = extractVisualAssets(markdown);
+  const normalizedMarkdown = cleanGeneratedText(extractedVisuals.content);
   const cleaned = stripDuplicateHeaderLines(normalizedMarkdown, metadata);
   const validation = validateRenderedMath(cleaned.content);
   const exportTextContent = normalizeParagraphSpacing(renderMathToPlainText(cleaned.content));
@@ -1089,7 +1494,7 @@ export function prepareExportMarkdown(
   return {
     content: cleaned.content,
     exportTextContent,
-    blocks: buildStructuredExportBlocks(exportTextContent),
+    blocks: buildStructuredExportBlocks(exportTextContent, extractedVisuals.visualAssets),
     strippedHeaderLineCount: cleaned.strippedHeaderLineCount,
     invalidMathCount: validation.invalidMathCount,
     mathExpressionCount: validation.mathExpressionCount,
