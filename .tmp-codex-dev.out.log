@@ -1,0 +1,17 @@
+
+> saas-app@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+- Environments: .env.local
+✓ Ready in 1059ms
+Creating turbopack project { dir: 'C:\\Users\\GS959\\Desktop\\SaaS\\saas-app', testMode: true }
+
+ GET /dashboard/tools/cheatsheet 200 in 597ms (next.js: 321ms, application-code: 277ms)
+ POST /api/export/docx 200 in 438ms (next.js: 298ms, application-code: 141ms)
+ POST /api/export/docx 200 in 180ms (next.js: 120ms, application-code: 60ms)
+ GET /dashboard/tools/lesson-plan 200 in 1605ms (next.js: 1402ms, application-code: 203ms)
+ POST /api/export/docx 200 in 190ms (next.js: 125ms, application-code: 65ms)
+ GET /dashboard/tools/question-paper 200 in 1237ms (next.js: 1071ms, application-code: 166ms)

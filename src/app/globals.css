@@ -110,7 +110,7 @@ body {
 
 .document-surface .pdf-table-wrapper,
 #pdf-content .pdf-table-wrapper {
-  margin: 16px 0 18px;
+  margin: 12px 0 14px;
   overflow: visible;
   border: 1px solid #cbd5e1;
   border-radius: 12px;
@@ -246,7 +246,7 @@ h4 {
 #pdf-content th,
 #pdf-content td {
   border: 1px solid #cbd5e1;
-  padding: 10px 12px;
+  padding: 8px 9px;
   text-align: left;
   vertical-align: top;
   word-break: break-word;
@@ -266,6 +266,470 @@ h4 {
 #pdf-content thead {
   break-inside: avoid;
   page-break-inside: avoid;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__page {
+  padding: 0.55in 0.48in 0.62in;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__header {
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__title {
+  color: #1e3a8a;
+  font-size: 20px;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body h2 {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  padding: 6px 9px;
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid #2563eb;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body h3 {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  color: #1e3a8a;
+  font-size: 15px;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body p,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body li {
+  margin-bottom: 6px;
+  font-size: 13.75px;
+  line-height: 1.4;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body ul,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body ol {
+  margin-bottom: 8px;
+  padding-left: 18px;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body table {
+  margin: 10px 0 12px;
+  font-size: 12.8px;
+  line-height: 1.32;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body th,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body td {
+  padding: 6px 7px;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body th {
+  background: #dbeafe;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body tbody tr:nth-child(even) td {
+  background: #f8fbff;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-meta-table,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table {
+  font-size: 13.25px;
+  line-height: 1.36;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-meta-table thead th,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table thead th,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table thead th,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table thead th,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table thead th {
+  padding: 8px 7px;
+  background: #d7e7ff;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-meta-table th:first-child,
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-meta-table td:first-child {
+  width: 30%;
+  font-weight: 700;
+  color: #1e3a8a;
+  background: #eff6ff;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table th:nth-child(1),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table td:nth-child(1) {
+  width: 28%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table th:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table td:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table th:nth-child(3),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table td:nth-child(3),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table th:nth-child(4),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-objectives-table td:nth-child(4) {
+  width: 24%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(1),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(1) {
+  width: 11%;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(2) {
+  width: 10%;
+  text-align: center;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(3),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(3) {
+  width: 24%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(4),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(4) {
+  width: 22%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(5),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(5) {
+  width: 18%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table th:nth-child(6),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-table td:nth-child(6) {
+  width: 15%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table th:nth-child(1),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table td:nth-child(1),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table th:nth-child(1),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table td:nth-child(1) {
+  width: 18%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table th:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-support-table td:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table th:nth-child(2),
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-assessment-table td:nth-child(2) {
+  width: 36%;
+}
+
+#pdf-content .eduforge-document--lesson_plan .eduforge-document__body .lesson-plan-visual {
+  margin: 12px 0;
+  padding: 8px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__page {
+  padding: 0.54in 0.46in 0.62in;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__header {
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__title {
+  color: #7c2d12;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body h2 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding: 6px 9px;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body h3 {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  color: #7c2d12;
+  font-size: 15px;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body p,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body li {
+  margin-bottom: 6px;
+  font-size: 13.75px;
+  line-height: 1.42;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body ul,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body ol {
+  margin-bottom: 8px;
+  padding-left: 18px;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body table {
+  margin: 10px 0 12px;
+  font-size: 12.8px;
+  line-height: 1.34;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body th,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body td {
+  padding: 6px 7px;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body th {
+  background: #ffedd5;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body tbody tr:nth-child(even) td {
+  background: #fffaf5;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-meta-table,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table {
+  font-size: 13.25px;
+  line-height: 1.36;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-meta-table thead th,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table thead th,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table thead th,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table thead th {
+  padding: 8px 7px;
+  background: #ffedd5;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-meta-table th:first-child,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-meta-table td:first-child {
+  width: 30%;
+  font-weight: 700;
+  color: #7c2d12;
+  background: #fff7ed;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(1),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(1) {
+  width: 12%;
+  text-align: center;
+  font-weight: 700;
+  color: #7c2d12;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(2),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(2) {
+  width: 26%;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(3),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(3),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(4),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(4),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(5),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(5) {
+  width: 12%;
+  text-align: center;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table th:nth-child(6),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-blueprint-table td:nth-child(6) {
+  width: 25%;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table th:nth-child(1),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table td:nth-child(1),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table th:nth-child(1),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table td:nth-child(1) {
+  width: 10%;
+  text-align: center;
+  font-weight: 700;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table th:nth-child(2),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table td:nth-child(2) {
+  width: 78%;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table th:nth-child(3),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-table td:nth-child(3) {
+  width: 12%;
+  text-align: center;
+  font-weight: 700;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table th:nth-child(2),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table td:nth-child(2) {
+  width: 72%;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table th:nth-child(3),
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .marking-scheme-table td:nth-child(3) {
+  width: 18%;
+  text-align: center;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .instructions-box,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .exam-section,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .case-box,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .answer-key {
+  margin: 10px 0 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .instructions-box {
+  border-left-color: #7c2d12;
+  background: #fff7ed;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .exam-section {
+  border-left-color: #ea580c;
+  background: #ffffff;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .case-box,
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .answer-key {
+  border-left-color: #c2410c;
+  background: #fff7ed;
+}
+
+#pdf-content .eduforge-document--question_paper .eduforge-document__body .question-paper-visual {
+  margin: 12px 0;
+  padding: 8px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fffaf5;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__page {
+  padding: 0.5in 0.45in 0.56in;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__header {
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__title {
+  margin-top: 8px;
+  font-size: 19px;
+  color: #0f766e;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body {
+  font-size: 14.5px;
+  line-height: 1.42;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding: 6px 9px;
+  border: 1px solid #99f6e4;
+  border-left: 4px solid #0f766e;
+  border-radius: 10px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body h3 {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body p,
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body li {
+  margin-bottom: 6px;
+  font-size: 14.5px;
+  line-height: 1.42;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body ul,
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body ol {
+  margin-bottom: 8px;
+  padding-left: 18px;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body table {
+  margin: 10px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.32;
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body th,
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body td {
+  padding: 6px 7px;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body th {
+  background: #ccfbf1;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body .cheatsheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body .cheatsheet-card,
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body .cheatsheet-visual {
+  margin: 0;
+  padding: 9px 10px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #0f766e;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body .formula-box,
+#pdf-content .eduforge-document--cheatsheet .eduforge-document__body .summary-box {
+  margin: 10px 0 12px;
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+@media (max-width: 720px) {
+  #pdf-content .eduforge-document--cheatsheet .eduforge-document__body .cheatsheet-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 #pdf-content.pdf-export-ready,

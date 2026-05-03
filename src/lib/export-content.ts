@@ -522,24 +522,90 @@ export function hasRichVisualContent(value: string) {
 }
 
 const LESSON_PLAN_TABLE_HEADERS = [
-  "week",
-  "period",
-  "topic subtopic",
-  "learning objectives",
-  "pedagogy 5e model",
-  "resources",
-  "assessment",
-  "competencies",
+  "phase",
+  "time period",
+  "teacher actions",
+  "learner activities",
+  "resources board work",
+  "assessment evidence",
 ];
 
 export function getPreferredTableColumnPercentages(headerCells: string[]) {
   const normalizedHeaders = headerCells.map((header) => normalizeComparisonText(header));
 
   if (
+    normalizedHeaders.length === 2 &&
+    normalizedHeaders[0] === "field" &&
+    normalizedHeaders[1] === "details"
+  ) {
+    return [28, 72];
+  }
+
+  if (
+    normalizedHeaders.length === 4 &&
+    normalizedHeaders[0] === "learning objectives" &&
+    normalizedHeaders[1].includes("competencies") &&
+    normalizedHeaders[2] === "success criteria" &&
+    normalizedHeaders[3] === "assessment evidence"
+  ) {
+    return [28, 24, 24, 24];
+  }
+
+  if (
     normalizedHeaders.length === LESSON_PLAN_TABLE_HEADERS.length &&
     normalizedHeaders.every((header, index) => header === LESSON_PLAN_TABLE_HEADERS[index])
   ) {
-    return [7, 7, 16, 18, 24, 9, 9, 10];
+    return [11, 10, 24, 22, 18, 15];
+  }
+
+  if (
+    normalizedHeaders.length === 4 &&
+    normalizedHeaders[0].includes("need") &&
+    normalizedHeaders[1] === "strategy" &&
+    normalizedHeaders[2] === "teacher support" &&
+    normalizedHeaders[3] === "expected outcome"
+  ) {
+    return [18, 36, 24, 22];
+  }
+
+  if (
+    normalizedHeaders.length === 4 &&
+    normalizedHeaders[0] === "component" &&
+    normalizedHeaders[1].includes("task question") &&
+    normalizedHeaders[2] === "purpose" &&
+    normalizedHeaders[3].includes("follow up")
+  ) {
+    return [18, 36, 22, 24];
+  }
+
+  if (
+    normalizedHeaders.length === 6 &&
+    normalizedHeaders[0] === "section" &&
+    normalizedHeaders[1] === "question type" &&
+    normalizedHeaders[2] === "no of questions" &&
+    normalizedHeaders[3] === "marks each" &&
+    normalizedHeaders[4] === "total marks" &&
+    normalizedHeaders[5] === "competency focus"
+  ) {
+    return [12, 26, 13, 12, 12, 25];
+  }
+
+  if (
+    normalizedHeaders.length === 3 &&
+    normalizedHeaders[0].startsWith("q no") &&
+    normalizedHeaders[1] === "question" &&
+    normalizedHeaders[2] === "marks"
+  ) {
+    return [10, 78, 12];
+  }
+
+  if (
+    normalizedHeaders.length === 3 &&
+    normalizedHeaders[0].startsWith("q no") &&
+    normalizedHeaders[1].includes("expected answer") &&
+    normalizedHeaders[2] === "marks"
+  ) {
+    return [10, 72, 18];
   }
 
   if (

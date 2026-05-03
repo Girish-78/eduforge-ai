@@ -16,7 +16,7 @@ import {
 import {
   buildGeneratedDocumentFragment,
 } from "@/lib/generated-document";
-import { hasRichVisualContent, prepareExportMarkdown } from "@/lib/export-content";
+import { prepareExportMarkdown } from "@/lib/export-content";
 import {
   resolveFirebaseStorageDownloadUrl,
   toBase64,
@@ -199,10 +199,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
     values.schoolName,
     values.subject,
   ]);
-  const shouldUseBrowserPdfExport = useMemo(() => {
-    return output.trim() ? hasRichVisualContent(output) : false;
-  }, [output]);
-
   const exportButtonsDisabled = loading || activeExportAction !== null;
 
   useEffect(() => {
@@ -497,12 +493,6 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
       setError("");
       setActiveExportAction("pdf");
 
-      if (!shouldUseBrowserPdfExport) {
-        await downloadServerExport("pdf");
-        toast.success("PDF downloaded");
-        return;
-      }
-
       const exportDocument = await createExportPages();
       cleanup = exportDocument.cleanup;
       const { default: html2pdf } = await import("html2pdf.js");
@@ -514,13 +504,13 @@ export function ToolGenerator({ tool, sessionUser }: ToolGeneratorProps) {
             mode: ["css", "legacy"],
             avoid: [
               "tr",
-              ".formula-box",
-              ".summary-box",
-              ".instructions-box",
-              ".case-box",
-              ".worksheet-section",
-              ".exam-section",
-              ".mindmap-box",
+              "figure",
+              "svg",
+              "img",
+              ".lesson-plan-visual",
+              ".question-paper-visual",
+              ".cheatsheet-card",
+              ".cheatsheet-visual",
             ],
           },
         })

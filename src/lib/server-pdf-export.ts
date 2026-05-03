@@ -14,7 +14,7 @@ import type { ExportFilePayload } from "@/lib/export-types";
 const FONT_REGULAR_FILE = "KaTeX_Main-Regular.ttf";
 const FONT_BOLD_FILE = "KaTeX_Main-Bold.ttf";
 const FONT_FAMILY = "KaTeXMain";
-const PAGE_MARGIN_MM = 20;
+const PAGE_MARGIN_MM = 12;
 const CONTENT_WIDTH_MM = 210 - PAGE_MARGIN_MM * 2;
 const FOOTER_RESERVE_MM = 10;
 const MAX_LOGO_WIDTH_MM = 40;

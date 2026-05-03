@@ -1,11 +1,11 @@
 const MM_TO_PX = 96 / 25.4;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
-const PDF_MARGIN_MM = 12;
-const PRINT_MARGIN_TOP_MM = 12;
-const PRINT_MARGIN_RIGHT_MM = 12;
-const PRINT_MARGIN_BOTTOM_MM = 14;
-const PRINT_MARGIN_LEFT_MM = 12;
+const PDF_MARGIN_MM = 10;
+const PRINT_MARGIN_TOP_MM = 10;
+const PRINT_MARGIN_RIGHT_MM = 10;
+const PRINT_MARGIN_BOTTOM_MM = 12;
+const PRINT_MARGIN_LEFT_MM = 10;
 const EXPORT_SURFACE_PADDING_PX = 0;
 const PAGE_WIDTH_PX = Math.round((A4_WIDTH_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
 const PAGE_HEIGHT_PX = Math.round((A4_HEIGHT_MM - PDF_MARGIN_MM * 2) * MM_TO_PX);
@@ -140,17 +140,16 @@ const PDF_EXPORT_STYLES = `
 
   .pdf-export-document .katex-display,
   .pdf-export-document .pdf-formula-block,
-  .pdf-export-document .pdf-table-wrapper,
   .pdf-export-document tr,
   .pdf-export-document pre,
   .pdf-export-document blockquote,
-  .pdf-export-document .formula-box,
-  .pdf-export-document .summary-box,
-  .pdf-export-document .instructions-box,
-  .pdf-export-document .case-box,
-  .pdf-export-document .worksheet-section,
-  .pdf-export-document .exam-section,
-  .pdf-export-document .mindmap-box {
+  .pdf-export-document figure,
+  .pdf-export-document svg,
+  .pdf-export-document img,
+  .pdf-export-document .lesson-plan-visual,
+  .pdf-export-document .question-paper-visual,
+  .pdf-export-document .cheatsheet-card,
+  .pdf-export-document .cheatsheet-visual {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -214,7 +213,7 @@ const PDF_EXPORT_STYLES = `
 
   .pdf-export-document .pdf-table-wrapper {
     width: 100%;
-    margin: 16px 0 18px;
+    margin: 12px 0 14px;
     overflow: visible !important;
     border: 1px solid #cbd5e1;
     border-radius: 12px;
@@ -238,7 +237,7 @@ const PDF_EXPORT_STYLES = `
   .pdf-export-document th,
   .pdf-export-document td {
     border: 1px solid #cbd5e1;
-    padding: 10px 12px;
+    padding: 8px 9px;
     text-align: left;
     vertical-align: top;
     word-break: break-word;
@@ -315,16 +314,15 @@ const PDF_EXPORT_STYLES = `
     }
 
     body.pdf-print-mode .print-container table,
-    body.pdf-print-mode .print-container .pdf-table-wrapper,
     body.pdf-print-mode .print-container thead,
     body.pdf-print-mode .print-container tr,
-    body.pdf-print-mode .print-container .formula-box,
-    body.pdf-print-mode .print-container .summary-box,
-    body.pdf-print-mode .print-container .instructions-box,
-    body.pdf-print-mode .print-container .case-box,
-    body.pdf-print-mode .print-container .worksheet-section,
-    body.pdf-print-mode .print-container .exam-section,
-    body.pdf-print-mode .print-container .mindmap-box {
+    body.pdf-print-mode .print-container figure,
+    body.pdf-print-mode .print-container svg,
+    body.pdf-print-mode .print-container img,
+    body.pdf-print-mode .print-container .lesson-plan-visual,
+    body.pdf-print-mode .print-container .question-paper-visual,
+    body.pdf-print-mode .print-container .cheatsheet-card,
+    body.pdf-print-mode .print-container .cheatsheet-visual {
       break-inside: avoid;
       page-break-inside: avoid;
     }

@@ -454,12 +454,15 @@ function buildHeaderBlocks({
   return blocks;
 }
 
-function createTableBlock(headerCells: string[], bodyRows: string[][]) {
+function createTableBlock(headerCells: string[], bodyRows: string[][], toolType: GenerateType) {
   const columnPercentages =
     getPreferredTableColumnPercentages(headerCells) ??
     Array.from({ length: Math.max(headerCells.length, 1) }, () =>
       Math.max(1, Math.floor(100 / Math.max(headerCells.length, 1))),
     );
+  const isCheatsheet = toolType === "cheatsheet";
+  const isLessonPlan = toolType === "lesson_plan";
+  const isQuestionPaper = toolType === "question_paper";
 
   return new Table({
     layout: TableLayoutType.FIXED,
@@ -508,19 +511,25 @@ function createTableBlock(headerCells: string[], bodyRows: string[][]) {
               type: WidthType.PERCENTAGE,
             },
             shading: {
-              fill: "F8FAFC",
+              fill: isCheatsheet
+                ? "CCFBF1"
+                : isQuestionPaper
+                  ? "FFEDD5"
+                  : isLessonPlan
+                    ? "DBEAFE"
+                    : "F8FAFC",
               color: "auto",
             },
             margins: {
-              top: 150,
-              bottom: 150,
-              left: 150,
-              right: 150,
+              top: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+              bottom: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+              left: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+              right: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
             },
             children: [
               createParagraphFromText(cell, {
                 bold: true,
-                size: 24,
+                size: isCheatsheet || isLessonPlan || isQuestionPaper ? 21 : 23,
                 color: "0F172A",
                 spacingAfter: 40,
               }),
@@ -537,14 +546,14 @@ function createTableBlock(headerCells: string[], bodyRows: string[][]) {
                 type: WidthType.PERCENTAGE,
               },
               margins: {
-                top: 150,
-                bottom: 150,
-                left: 150,
-                right: 150,
+                top: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+                bottom: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+                left: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
+                right: isCheatsheet || isLessonPlan || isQuestionPaper ? 90 : 130,
               },
               children: [
                 createParagraphFromText(cell, {
-                  size: 22,
+                  size: isCheatsheet || isLessonPlan || isQuestionPaper ? 20 : 22,
                   color: "0F172A",
                   spacingAfter: 40,
                 }),
@@ -630,22 +639,77 @@ async function createVisualBlocks(asset: ExportVisualAsset): Promise<Paragraph[]
   }
 }
 
+function createCalloutTable(children: DocxBlock[], fill = "F0FDFA") {
+  return new Table({
+    layout: TableLayoutType.FIXED,
+    width: {
+      size: 100,
+      type: WidthType.PERCENTAGE,
+    },
+    borders: {
+      top: { style: BorderStyle.SINGLE, color: "99F6E4", size: 6 },
+      bottom: { style: BorderStyle.SINGLE, color: "99F6E4", size: 6 },
+      left: { style: BorderStyle.SINGLE, color: "0F766E", size: 12 },
+      right: { style: BorderStyle.SINGLE, color: "99F6E4", size: 6 },
+      insideHorizontal: { style: BorderStyle.SINGLE, color: "D9E2EF", size: 3 },
+      insideVertical: { style: BorderStyle.SINGLE, color: "D9E2EF", size: 3 },
+    },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            shading: {
+              fill,
+              color: "auto",
+            },
+            margins: {
+              top: 120,
+              bottom: 100,
+              left: 140,
+              right: 140,
+            },
+            children: children.length
+              ? children
+              : [
+                  createParagraphFromText(" ", {
+                    spacingAfter: 0,
+                  }),
+                ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
 async function buildBodyBlocks(
   preparedBlocks: ReturnType<typeof getPreparedExportBlocks>,
   title: string,
+  toolType: GenerateType,
 ) {
   const blocks: DocxBlock[] = [];
   let insertedTitle = false;
+  const accentColor =
+    toolType === "cheatsheet"
+      ? "0F766E"
+      : toolType === "question_paper"
+        ? "7C2D12"
+        : "1E3A8A";
+  const compactDocument =
+    toolType === "cheatsheet" ||
+    toolType === "lesson_plan" ||
+    toolType === "question_paper";
 
-  for (const block of preparedBlocks) {
+  const renderBlock = async (
+    block: (typeof preparedBlocks)[number],
+    options: { inCard?: boolean } = {},
+  ): Promise<DocxBlock[]> => {
     if (block.type === "table") {
-      blocks.push(createTableBlock(block.headerCells, block.bodyRows));
-      continue;
+      return [createTableBlock(block.headerCells, block.bodyRows, toolType)];
     }
 
     if (block.type === "visual") {
-      blocks.push(...(await createVisualBlocks(block.asset)));
-      continue;
+      return createVisualBlocks(block.asset);
     }
 
     if (block.type === "heading") {
@@ -653,10 +717,10 @@ async function buildBodyBlocks(
 
       if (!insertedTitle && normalizedHeading === normalizeText(title)) {
         insertedTitle = true;
-        continue;
+        return [];
       }
 
-      blocks.push(
+      return [
         createParagraphFromText(block.text, {
           heading:
             block.level === 1
@@ -665,18 +729,37 @@ async function buildBodyBlocks(
                 ? HeadingLevel.HEADING_2
                 : HeadingLevel.HEADING_3,
           bold: true,
-          color: "1E3A8A",
-          size: block.level === 1 ? 32 : block.level === 2 ? 28 : 24,
-          spacingBefore: block.level === 1 ? 140 : block.level === 2 ? 110 : 90,
-          spacingAfter: block.level === 1 ? 140 : 100,
+          color: accentColor,
+          size:
+            compactDocument
+              ? block.level === 1
+                ? 28
+                : block.level === 2
+                  ? 24
+                  : 22
+              : block.level === 1
+                ? 32
+                : block.level === 2
+                  ? 28
+                  : 24,
+          spacingBefore:
+            compactDocument
+              ? block.level === 1
+                ? 100
+                : 80
+              : block.level === 1
+                ? 140
+                : block.level === 2
+                  ? 110
+                  : 90,
+          spacingAfter: compactDocument ? 70 : block.level === 1 ? 140 : 100,
+          borderBottom: !options.inCard,
         }),
-      );
-      continue;
+      ];
     }
 
     if (block.type === "list") {
-      block.items.forEach((item) => {
-        blocks.push(
+      return block.items.map((item) =>
           createParagraphFromText(item, {
             bullet: block.ordered ? undefined : { level: 0 },
             numbering: block.ordered
@@ -684,20 +767,48 @@ async function buildBodyBlocks(
               : undefined,
             size: 22,
             color: "0F172A",
-            spacingAfter: 90,
+            spacingAfter: compactDocument ? 55 : 90,
           }),
-        );
-      });
+      );
+    }
+
+    return [
+      createParagraphFromText(block.text, {
+        size: compactDocument ? 21 : 22,
+        color: "0F172A",
+        spacingAfter: compactDocument ? 80 : 140,
+      }),
+    ];
+  };
+
+  let index = 0;
+
+  while (index < preparedBlocks.length) {
+    const block = preparedBlocks[index];
+
+    if (toolType === "cheatsheet" && block?.type === "heading" && block.level >= 3) {
+      const cardChildren: DocxBlock[] = [];
+      cardChildren.push(...(await renderBlock(block, { inCard: true })));
+      index += 1;
+
+      while (index < preparedBlocks.length) {
+        const nextBlock = preparedBlocks[index];
+        if (!nextBlock || nextBlock.type === "heading") {
+          break;
+        }
+
+        cardChildren.push(...(await renderBlock(nextBlock, { inCard: true })));
+        index += 1;
+      }
+
+      blocks.push(createCalloutTable(cardChildren));
       continue;
     }
 
-    blocks.push(
-      createParagraphFromText(block.text, {
-        size: 22,
-        color: "0F172A",
-        spacingAfter: 140,
-      }),
-    );
+    if (block) {
+      blocks.push(...(await renderBlock(block)));
+    }
+    index += 1;
   }
 
   return {
@@ -754,6 +865,10 @@ export async function createDocxBlob({
   periods,
   logo,
 }: CreateDocxBlobOptions) {
+  const compactDocument =
+    toolType === "cheatsheet" ||
+    toolType === "lesson_plan" ||
+    toolType === "question_paper";
   const body = await buildBodyBlocks(
     getPreparedExportBlocks({
       title,
@@ -768,6 +883,7 @@ export async function createDocxBlob({
       logo,
     }),
     title,
+    toolType,
   );
   const document = new Document({
     creator: "Eduforge-AI",
@@ -801,10 +917,10 @@ export async function createDocxBlob({
         properties: {
           page: {
             margin: {
-              top: 1080,
-              right: 900,
-              bottom: 1080,
-              left: 900,
+              top: compactDocument ? 720 : 900,
+              right: compactDocument ? 650 : 780,
+              bottom: compactDocument ? 820 : 980,
+              left: compactDocument ? 650 : 780,
               header: 420,
               footer: 540,
             },
