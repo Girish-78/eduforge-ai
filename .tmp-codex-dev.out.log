@@ -15,3 +15,11 @@ Creating turbopack project { dir: 'C:\\Users\\GS959\\Desktop\\SaaS\\saas-app', t
  GET /dashboard/tools/lesson-plan 200 in 1605ms (next.js: 1402ms, application-code: 203ms)
  POST /api/export/docx 200 in 190ms (next.js: 125ms, application-code: 65ms)
  GET /dashboard/tools/question-paper 200 in 1237ms (next.js: 1071ms, application-code: 166ms)
+ GET / 200 in 931ms (next.js: 370ms, application-code: 562ms)
+ GET / 200 in 186ms (next.js: 17ms, application-code: 170ms)
+ GET / 200 in 260ms (next.js: 72ms, application-code: 188ms)
+○ Compiling /_not-found/page ...
+ GET /auth 404 in 3.7s (next.js: 3.5s, application-code: 179ms)
+ GET /auth 404 in 324ms (next.js: 185ms, application-code: 139ms)
+ GET / 200 in 356ms (next.js: 62ms, application-code: 293ms)
+ GET / 200 in 155ms (next.js: 20ms, application-code: 135ms)
